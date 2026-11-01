@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/evidence_link.json",
+  "title": "Evidence Link",
+  "description": "Information supporting or challenging a claim.",
+  "type": "object",
+  "required": ["id", "claim_id", "relationship_type", "assessment_status", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Evidence link identifier"
+    },
+    "claim_id": {
+      "type": "string",
+      "description": "Foreign key to Claim"
+    },
+    "observation_id": {
+      "type": ["string", "null"],
+      "description": "Foreign key to Observation"
+    },
+    "relationship_type": {
+      "type": "string",
+      "enum": ["SUPPORTS", "CONTRADICTS", "QUALIFIES", "DERIVED_FROM", "REPEATS", "ATTRIBUTED_TO", "SUPERSEDES", "CORROBORATES"],
+      "description": "Relationship type"
+    },
+    "explanation": {
+      "type": "string",
+      "description": "Explanation of the inference"
+    },
+    "assessment_status": {
+      "type": "string",
+      "enum": ["SUPPORTED", "CONTRADICTED", "PARTIALLY_SUPPORTED", "CONTESTED", "UNRESOLVED"],
+      "description": "Assessment status"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    }
+  },
+  "additionalProperties": false
+}

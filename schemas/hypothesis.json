@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/hypothesis.json",
+  "title": "Hypothesis",
+  "description": "An explanatory model.",
+  "type": "object",
+  "required": ["id", "statement", "domain_id", "status", "prior_assumptions", "methodology", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Hypothesis identifier"
+    },
+    "statement": {
+      "type": "string",
+      "description": "The hypothesis statement"
+    },
+    "domain_id": {
+      "type": "string",
+      "description": "Foreign key to Domain"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["HYPOTHESIS", "SUPPORTED", "CONTESTED", "CONTRADICTED", "INVALIDATED", "SUPERSEDED"],
+      "description": "Hypothesis status"
+    },
+    "prior_assumptions": {
+      "type": "string",
+      "description": "Prior assumptions"
+    },
+    "methodology": {
+      "type": "string",
+      "description": "Methodology"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "revised_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Last revision timestamp"
+    }
+  },
+  "additionalProperties": false
+}

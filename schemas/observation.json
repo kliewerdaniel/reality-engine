@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/observation.json",
+  "title": "Observation",
+  "description": "A directly measured or recorded observation.",
+  "type": "object",
+  "required": ["id", "observation_type", "subject_id", "observed_value", "valid_from", "recorded_at", "source_id", "document_id", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Observation identifier"
+    },
+    "observation_type": {
+      "type": "string",
+      "enum": ["MEASUREMENT", "REPORT", "MANIFESTATION", "EVENT", "STATEMENT"],
+      "description": "Type of observation"
+    },
+    "subject_id": {
+      "type": "string",
+      "description": "Foreign key to Entity"
+    },
+    "observed_value": {
+      "type": "string",
+      "description": "The observed value"
+    },
+    "unit": {
+      "type": "string",
+      "description": "Measurement unit"
+    },
+    "valid_from": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the observation applies"
+    },
+    "valid_to": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "When the observation ceased to apply"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the system recorded it"
+    },
+    "source_id": {
+      "type": "string",
+      "description": "Foreign key to Source"
+    },
+    "document_id": {
+      "type": "string",
+      "description": "Foreign key to Document"
+    },
+    "provenance_reference": {
+      "type": "string",
+      "description": "Reference to the provenance record"
+    },
+    "extraction_version": {
+      "type": "string",
+      "description": "Extraction version"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "updated_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Update timestamp"
+    }
+  },
+  "additionalProperties": false
+}

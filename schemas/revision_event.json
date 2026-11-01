@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/revision_event.json",
+  "title": "Revision Event",
+  "description": "Every proposed and accepted revision.",
+  "type": "object",
+  "required": ["id", "trigger_observation_id", "previous_state_id", "resulting_state_id", "revision_type", "proposal_reference", "validation_result", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Revision event identifier"
+    },
+    "trigger_observation_id": {
+      "type": "string",
+      "description": "Triggering observation"
+    },
+    "previous_state_id": {
+      "type": "string",
+      "description": "Previous state"
+    },
+    "resulting_state_id": {
+      "type": "string",
+      "description": "Resulting state"
+    },
+    "revision_type": {
+      "type": "string",
+      "enum": ["NEW_INFORMATION", "SUPPORTED", "PARTIALLY_SUPPORTED", "CHALLENGED", "CONTRADICTED", "SUPERSEDED", "WITHDRAWN", "UNRESOLVED", "NO_CHANGE"],
+      "description": "Outcome type"
+    },
+    "proposal_reference": {
+      "type": "string",
+      "description": "Proposal reference"
+    },
+    "validation_result": {
+      "type": "string",
+      "description": "Validation result"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    }
+  },
+  "additionalProperties": false
+}

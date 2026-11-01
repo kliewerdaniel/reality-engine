@@ -1,0 +1,43 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/entity.json",
+  "title": "Entity",
+  "description": "An identifiable object in the world.",
+  "type": "object",
+  "required": ["id", "canonical_name", "entity_type", "domain_id", "created_at", "updated_at", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Entity identifier"
+    },
+    "canonical_name": {
+      "type": "string",
+      "description": "Canonical name of the entity"
+    },
+    "entity_type": {
+      "type": "string",
+      "enum": ["COUNTRY", "GOVERNMENT", "ORGANIZATION", "PERSON", "REGION", "INSTITUTION", "SCIENTIFIC_ORGANIZATION", "INFRASTRUCTURE_SYSTEM", "TECHNOLOGY"],
+      "description": "Type of entity"
+    },
+    "domain_id": {
+      "type": "string",
+      "description": "Foreign key to Domain"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Update timestamp"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ACTIVE", "INACTIVE", "DELETED"],
+      "description": "Entity status"
+    }
+  },
+  "additionalProperties": false
+}

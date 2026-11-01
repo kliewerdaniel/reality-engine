@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/forecast.json",
+  "title": "Forecast",
+  "description": "A formal prediction.",
+  "type": "object",
+  "required": ["id", "hypothesis_id", "predicted_outcome", "probability", "evaluation_horizon", "resolution_criteria", "created_at", "status"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Forecast identifier"
+    },
+    "hypothesis_id": {
+      "type": "string",
+      "description": "Foreign key to Hypothesis"
+    },
+    "predicted_outcome": {
+      "type": "string",
+      "description": "Predicted outcome"
+    },
+    "probability": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Predicted probability"
+    },
+    "evaluation_horizon": {
+      "type": "string",
+      "description": "Evaluation horizon"
+    },
+    "resolution_criteria": {
+      "type": "string",
+      "description": "Resolution criteria"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "evaluated_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "When evaluated"
+    },
+    "observed_outcome": {
+      "type": ["string", "null"],
+      "description": "Actual outcome"
+    },
+    "score": {
+      "type": ["number", "null"],
+      "description": "Scoring result"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["OPEN", "EVALUATED", "RESOLVED", "WITHDRAWN"],
+      "description": "Forecast status"
+    }
+  },
+  "additionalProperties": false
+}

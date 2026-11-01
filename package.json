@@ -1,0 +1,33 @@
+{
+  "name": "reality-engine",
+  "version": "0.1.0",
+  "description": "A continuously operating computational system that constructs, maintains, evaluates, and revises a global representation of the world.",
+  "scripts": {
+    "dev": "python -m reality_engine.cli dev",
+    "test": "pytest",
+    "test:coverage": "pytest --cov=reality_engine --cov-report=term-missing",
+    "lint": "ruff check .",
+    "type-check": "mypy reality_engine",
+    "build": "python -m build",
+    "start": "python -m reality_engine.cli start"
+  },
+  "dependencies": {
+    "fastapi": "^0.109.0",
+    "uvicorn": "^0.27.0",
+    "sqlalchemy": "^2.0.0",
+    "sqlite3": "3.40+",
+    "pydantic": "^2.0",
+    "pydantic-settings": "^2.0",
+    "requests": "^2.31.0",
+    "rssparser": "^1.0.0",
+    "jinja2": "^3.1.0",
+    "websockets": "^12.0"
+  },
+  "devDependencies": {
+    "pytest": "^7.0",
+    "pytest-cov": "^4.0",
+    "ruff": "^0.1.0",
+    "mypy": "^1.0",
+    "pre-commit": "^3.0"
+  }
+}

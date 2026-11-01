@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/source.json",
+  "title": "Source",
+  "description": "The origin of information. The first object in the provenance chain.",
+  "type": "object",
+  "required": ["id", "name", "source_type", "canonical_domain", "authority_metadata", "collection_policy", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Stable unique identifier (e.g., src_000001)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Source name (e.g., Reuters)"
+    },
+    "source_type": {
+      "type": "string",
+      "enum": ["NEWS", "ECONOMIC", "SCIENTIFIC", "GOVERNMENT", "INSTITUTIONAL", "OTHER"],
+      "description": "Type of source"
+    },
+    "canonical_domain": {
+      "type": "string",
+      "description": "Canonical domain classification"
+    },
+    "authority_metadata": {
+      "type": "object",
+      "description": "Authority metadata",
+      "properties": {
+        "reliability_score": {"type": "number"},
+        "expertise": {"type": "array", "items": {"type": "string"}},
+        "known_limits": {"type": "array", "items": {"type": "string"}},
+        "access_restrictions": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "collection_policy": {
+      "type": "object",
+      "description": "Collection policy rules",
+      "properties": {
+        "collection_interval": {"type": "string"},
+        "deduplication_enabled": {"type": "boolean"},
+        "rate_limit": {"type": "integer"},
+        "retry_policy": {"type": "string"}
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the source was registered"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the record was last updated"
+    }
+  },
+  "additionalProperties": false
+}

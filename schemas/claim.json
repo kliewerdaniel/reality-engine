@@ -1,0 +1,70 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/claim.json",
+  "title": "Claim",
+  "description": "An assertion about the world.",
+  "type": "object",
+  "required": ["id", "subject_id", "predicate", "object_value", "claim_type", "domain_id", "valid_from", "recorded_at", "status", "revision_number", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Claim identifier"
+    },
+    "subject_id": {
+      "type": "string",
+      "description": "Foreign key to Entity (subject of the claim)"
+    },
+    "predicate": {
+      "type": "string",
+      "description": "Predicate (relationship type)"
+    },
+    "object_value": {
+      "type": "string",
+      "description": "The claim's object"
+    },
+    "claim_type": {
+      "type": "string",
+      "enum": ["FACTUAL", "REPORTED", "INTERPRETIVE", "PREDICTIVE", "NORMATIVE", "HYPOTHETICAL", "QUANTITATIVE"],
+      "description": "Claim type"
+    },
+    "domain_id": {
+      "type": "string",
+      "description": "Foreign key to Domain"
+    },
+    "valid_from": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the claim applies"
+    },
+    "valid_to": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "When the claim ceased to apply"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the system recorded it"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["UNASSESSED", "SUPPORTED", "PARTIALLY_SUPPORTED", "CONTESTED", "CONTRADICTED", "UNRESOLVED", "SUPERSEDED", "WITHDRAWN"],
+      "description": "Evidence status"
+    },
+    "revision_number": {
+      "type": "integer",
+      "description": "Revision counter"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "updated_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Update timestamp"
+    }
+  },
+  "additionalProperties": false
+}

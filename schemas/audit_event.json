@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/audit_event.json",
+  "title": "Audit Event",
+  "description": "A record of a significant operation.",
+  "type": "object",
+  "required": ["id", "event_type", "actor_type", "actor_id", "object_type", "object_id", "previous_hash", "event_hash", "payload_reference", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Audit event identifier"
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Event type"
+    },
+    "actor_type": {
+      "type": "string",
+      "description": "Actor type"
+    },
+    "actor_id": {
+      "type": "string",
+      "description": "Actor identifier"
+    },
+    "object_type": {
+      "type": "string",
+      "description": "Object type"
+    },
+    "object_id": {
+      "type": "string",
+      "description": "Object identifier"
+    },
+    "previous_hash": {
+      "type": ["string", "null"],
+      "description": "Hash of state before change"
+    },
+    "event_hash": {
+      "type": "string",
+      "description": "Hash of the event"
+    },
+    "payload_reference": {
+      "type": "string",
+      "description": "Reference to payload"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When recorded"
+    }
+  },
+  "additionalProperties": false
+}

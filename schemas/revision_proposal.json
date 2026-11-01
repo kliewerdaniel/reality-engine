@@ -1,0 +1,69 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/revision_proposal.json",
+  "title": "Revision Proposal",
+  "description": "A structured proposal to change the world model.",
+  "type": "object",
+  "required": ["proposal_id", "trigger_observation_id", "affected_records", "prior_versions", "changes", "dependencies", "status", "created_at"],
+  "properties": {
+    "proposal_id": {
+      "type": "string",
+      "description": "Proposal identifier"
+    },
+    "trigger_observation_id": {
+      "type": "string",
+      "description": "The observation that triggered the revision"
+    },
+    "affected_records": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Records affected by the proposal"
+    },
+    "prior_versions": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Relevant prior versions"
+    },
+    "changes": {
+      "type": "array",
+      "items": {"type": "object"},
+      "description": "The proposed changes"
+    },
+    "dependencies": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Dependencies affected"
+    },
+    "evidence": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Evidence references"
+    },
+    "temporal_consistency": {
+      "type": "string",
+      "enum": ["PASS", "FAIL"],
+      "description": "Temporal consistency check"
+    },
+    "governance_check": {
+      "type": "string",
+      "enum": ["PASS", "FAIL", "NEEDS_REVIEW"],
+      "description": "Governance check"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["PROPOSED", "VALIDATED", "COMMITTED", "REJECTED", "ROLLING_BACK", "ROLLED_BACK", "AWAITING_REVIEW"],
+      "description": "Status of the proposal"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "updated_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Update timestamp"
+    }
+  },
+  "additionalProperties": false
+}

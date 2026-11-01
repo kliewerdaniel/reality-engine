@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/world_state_snapshot.json",
+  "title": "World State Snapshot",
+  "description": "A versioned snapshot of the world state.",
+  "type": "object",
+  "required": ["id", "domain_id", "version", "parent_version", "state_hash", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "State identifier"
+    },
+    "domain_id": {
+      "type": "string",
+      "description": "Foreign key to domain"
+    },
+    "version": {
+      "type": "integer",
+      "description": "State version"
+    },
+    "parent_version": {
+      "type": "string",
+      "description": "Parent state version"
+    },
+    "state_hash": {
+      "type": "string",
+      "description": "Hash of the state"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    }
+  },
+  "additionalProperties": false
+}

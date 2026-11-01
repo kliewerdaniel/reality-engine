@@ -1,0 +1,48 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/agent_response.json",
+  "title": "Agent Response",
+  "description": "A structured output from an agent.",
+  "type": "object",
+  "required": ["response_id", "task_id", "agent", "structured_analysis", "evidence_references", "uncertainty", "proposed_changes", "created_at"],
+  "properties": {
+    "response_id": {
+      "type": "string",
+      "description": "Response identifier"
+    },
+    "task_id": {
+      "type": "string",
+      "description": "Task identifier"
+    },
+    "agent": {
+      "type": "string",
+      "enum": ["Analyst", "Skeptic", "Historian", "Forecaster", "Verifier", "Systems Integrator"],
+      "description": "Agent that produced the response"
+    },
+    "structured_analysis": {
+      "type": "object",
+      "description": "The agent's analysis in a structured format"
+    },
+    "evidence_references": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "References to the evidence supporting the analysis"
+    },
+    "uncertainty": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "The uncertainty associated with the analysis"
+    },
+    "proposed_changes": {
+      "type": "array",
+      "items": {"type": "object"},
+      "description": "Any proposed changes to the world model"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    }
+  },
+  "additionalProperties": false
+}

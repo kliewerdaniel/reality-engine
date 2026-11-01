@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/relationship.json",
+  "title": "Relationship",
+  "description": "A connection between entities, events, claims, or hypotheses.",
+  "type": "object",
+  "required": ["id", "source_entity_id", "target_entity_id", "relationship_type", "valid_from", "recorded_at", "evidence_status", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Relationship identifier"
+    },
+    "source_entity_id": {
+      "type": "string",
+      "description": "Foreign key to source entity"
+    },
+    "target_entity_id": {
+      "type": "string",
+      "description": "Foreign key to target entity"
+    },
+    "relationship_type": {
+      "type": "string",
+      "description": "Type of relationship"
+    },
+    "valid_from": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the relationship applies"
+    },
+    "valid_to": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "When the relationship ceased to apply"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the system recorded it"
+    },
+    "evidence_status": {
+      "type": "string",
+      "enum": ["SUPPORTED", "CONTRADICTED", "PARTIALLY_SUPPORTED", "UNSUPPORTED", "CONTESTED"],
+      "description": "Evidence status"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "updated_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Update timestamp"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kliewerdaniel/reality-engine/schemas/event.json",
+  "title": "Event",
+  "description": "An occurrence in the world.",
+  "type": "object",
+  "required": ["id", "event_type", "description", "valid_from", "recorded_at", "status", "created_at"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Event identifier"
+    },
+    "event_type": {
+      "type": "string",
+      "description": "Type of event"
+    },
+    "description": {
+      "type": "string",
+      "description": "Event description"
+    },
+    "location_id": {
+      "type": ["string", "null"],
+      "description": "Foreign key to Entity (location)"
+    },
+    "valid_from": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the event started"
+    },
+    "valid_to": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "When the event ended"
+    },
+    "recorded_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "When the system recorded it"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["ACTIVE", "COMPLETED", "CANCELLED", "ANNULLED"],
+      "description": "Event status"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Creation timestamp"
+    },
+    "updated_at": {
+      "type": ["string", "null"],
+      "format": "date-time",
+      "description": "Update timestamp"
+    }
+  },
+  "additionalProperties": false
+}
