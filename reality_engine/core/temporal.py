@@ -1,0 +1,175 @@
+"""Bitemporal data model for Reality Engine.
+
+Two independent time dimensions:
+- valid_time: When the information applies to the external world.
+- transaction_time: When Reality Engine learned or recorded the information.
+
+Example:
+- A regulation takes effect October 10 (valid_from).
+- It is reported October 12 (transaction_time).
+- Reality Engine collects it October 13 (recorded_at).
+- A correction arrives October 20, establishing the effective date was actually October 11.
+"""
+
+import sqlite3
+from datetime import datetime, timezone
+from typing import Optional
+
+# ── Bitemporal helpers ──────────────────────────────────────────────────────────
+
+def parse_iso8601(value: Optional[str]) -> Optional[datetime]:
+    """Parse ISO 8601 timestamp, returning None for 'None' or empty."""
+    if value is None or value == "None" or value == "":
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+
+
+def format_iso8601(dt: datetime) -> str:
+    """Format datetime as ISO 8601 UTC."""
+    return dt.isoformat().replace("+00:00", "Z")
+
+
+def bitemporal_key(recorded_at: str, valid_from: Optional[str] = None,
+                   valid_to: Optional[str] = None) -> tuple:
+    """Compute a deterministic bitemporal sort key."""
+    return (recorded_at or "", valid_from or "", valid_to or "")
+
+
+# ── Bitemporal query helpers ────────────────────────────────────────────────────
+
+def get_observations_in_interval(conn, valid_from_min: str, valid_from_max: str) -> list:
+    """Get observations whose valid_from falls within the interval."""
+    rows = conn.execute(
+        "SELECT * FROM observations WHERE valid_from IS NOT NULL"
+        " AND valid_from >= ? AND valid_from <= ?"
+        " ORDER BY valid_from", (valid_from_min, valid_from_max)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_observations_since(conn, since: str) -> list:
+    """Get observations recorded at or after the given timestamp."""
+    rows = conn.execute(
+        "SELECT * FROM observations WHERE recorded_at >= ? ORDER BY recorded_at", (since,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_relationships_in_interval(conn, valid_from_min: str, valid_from_max: str) -> list:
+    """Get relationships whose valid_from falls within the interval."""
+    rows = conn.execute(
+        "SELECT * FROM relationships WHERE valid_from IS NOT NULL"
+        " AND valid_from >= ? AND valid_from <= ?"
+        " ORDER BY valid_from", (valid_from_min, valid_from_max)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def get_relationships_since(conn, since: str) -> list:
+    """Get relationships recorded at or after the given timestamp."""
+    rows = conn.execute(
+        "SELECT * FROM relationships WHERE recorded_at >= ? ORDER BY recorded_at", (since,)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Historical reconstruction helpers ───────────────────────────────────────────
+
+def reconstruct_observations_at(
+    conn: sqlite3.Connection,
+    entity_id: str,
+    timestamp: str
+) -> list:
+    """Reconstruct what the system understood about an entity at a given point in time.
+
+    Uses recorded_at (transaction time) as the cutoff: only observations recorded
+    before or at `timestamp` are included in the reconstruction.
+
+    Args:
+        conn: SQLite connection.
+        entity_id: The entity ID.
+        timestamp: The time of reconstruction (ISO 8601).
+
+    Returns:
+        List of observations recorded at or before the timestamp.
+    """
+    rows = conn.execute(
+        "SELECT * FROM observations"
+        " WHERE subject_id = ? AND recorded_at <= ?"
+        " ORDER BY recorded_at", (entity_id, timestamp)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def reconstruct_claims_at(
+    conn: sqlite3.Connection,
+    entity_id: str,
+    timestamp: str
+) -> list:
+    """Reconstruct the system's understanding of a claim at a given time.
+
+    Returns claim versions recorded before or at the timestamp.
+    """
+    rows = conn.execute(
+        "SELECT * FROM claims"
+        " WHERE subject_id = ? AND recorded_at <= ?"
+        " ORDER BY recorded_at", (entity_id, timestamp)
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def reconstruct_events_at(
+    conn: sqlite3.Connection,
+    start_date: str = None,
+    end_date: str = None
+) -> list:
+    """Reconstruct events up to a given point in time."""
+    query = "SELECT * FROM events WHERE 1=1"
+    params = []
+    if start_date:
+        query += " AND occurred_at >= ?"
+        params.append(start_date)
+    if end_date:
+        query += " AND occurred_at <= ?"
+        params.append(end_date)
+    query += " ORDER BY occurred_at"
+    rows = conn.execute(query, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+# ── Bitemporal state materialization ────────────────────────────────────────────
+
+def materialize_world_state_at(
+    conn: sqlite3.Connection,
+    timestamp: str
+) -> dict:
+    """Materialize a snapshot of the world state at a given transaction time.
+
+    Returns a dictionary with:
+    - entities: all entities known at the time
+    - claims: claims with recorded_at <= timestamp
+    - observations: observations with recorded_at <= timestamp
+    - relationships: relationships with recorded_at <= timestamp
+    - events: events with recorded_at <= timestamp
+    - revision_count: number of revisions committed before timestamp
+    """
+    claims = reconstruct_claims_at(conn, None, timestamp)
+    observations = reconstruct_observations_at(conn, None, timestamp)
+    entities = conn.execute("SELECT * FROM entities ORDER BY canonical_name").fetchall()
+    relationships = get_relationships_since(conn, timestamp)
+    events = reconstruct_events_at(conn, None, timestamp)
+    revision_count = conn.execute(
+        "SELECT COUNT(*) as c FROM revisions WHERE created_at <= ?", (timestamp,)
+    ).fetchone()["c"]
+
+    return {
+        "entities": [dict(r) for r in entities],
+        "claims": claims,
+        "observations": observations,
+        "relationships": relationships,
+        "events": events,
+        "revision_count": revision_count,
+    }
