@@ -33,7 +33,6 @@ def test_f08_transaction_rollback():
     n = db.conn.execute("SELECT COUNT(*) c FROM domains WHERE name='ShouldRollBack'").fetchone()["c"]
     assert n == 0
 
-@pytest.mark.xfail(strict=True, reason="F-10")
 def test_f10_asof_status():
     import tempfile, pathlib
     from reality_engine.database import Database

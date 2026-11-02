@@ -197,6 +197,15 @@ class RevisionEngine:
                  claim["revision_number"] + 1, now),
             )
 
+            # Update current-state projection (current claims table)
+            db_conn.execute(
+                "UPDATE claims SET status = ?, revision_number = ?, updated_at = ? WHERE id = ?",
+                ("CONTESTED", claim["revision_number"] + 1, now, claim_id),
+            )
+
+            # Compute resulting state hash AFTER the update
+            resulting_hash = self.compute_state_hash(claim["subject_id"])
+
             # Record the revision event
             rev_event_id = self._uid("rev")
             db_conn.execute(
@@ -207,22 +216,7 @@ class RevisionEngine:
                 (rev_event_id, "CONTESTED", proposal["trigger_observation_id"],
                  proposal["proposal_id"], "PASS", claim["subject_id"],
                  tx_id, previous_version["id"], result_version_id,
-                 previous_hash, None, now),
-            )
-
-            # Update current-state projection (current claims table)
-            db_conn.execute(
-                "UPDATE claims SET status = ?, revision_number = ?, updated_at = ? WHERE id = ?",
-                ("CONTESTED", claim["revision_number"] + 1, now, claim_id),
-            )
-
-            # Compute resulting state hash AFTER the update
-            resulting_hash = self.compute_state_hash(claim["subject_id"])
-
-            # Update the revision record with the actual resulting hash
-            db_conn.execute(
-                "UPDATE revisions SET resulting_state_id = ? WHERE id = ?",
-                (resulting_hash, rev_event_id),
+                 previous_hash, resulting_hash, now),
             )
 
             # Record the audit event
