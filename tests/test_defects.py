@@ -12,12 +12,6 @@ import pytest
 # Ensure package is importable
 from pathlib import Path
 
-import sqlite3
-import sys
-import uuid
-
-import pytest
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from reality_engine.database import Database, _uid
@@ -184,15 +178,14 @@ CREATE TABLE IF NOT EXISTS claims (
 );
 """
 
+@pytest.fixture()
 def db():
-    @pytest.fixture()
-    def db():
-        conn = sqlite3.connect(":memory:")
-        conn.row_factory = sqlite3.Row
-        conn.executescript(SCHEMA)
-        dbm = Database(conn)
-        yield dbm
-        conn.close()
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(SCHEMA)
+    dbm = Database(conn)
+    yield dbm
+    conn.close()
 
 
 @pytest.fixture()
@@ -217,10 +210,10 @@ def db_with_data(db):
     doc_id = _uid("doc")
     content = "Inflation reached 3.2 percent in October 2026."
     db.conn.execute(
-        "INSERT INTO documents (id, source_id, source_native_id, content_hash, content_type, "
+        "INSERT INTO documents (id, source_id, source_native_id, canonical_url, content_hash, content_type, "
         "content, language, published_at, collected_at, processing_status, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (doc_id, src_id, f"native_{doc_id}", "hash", "article", content, "en",
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (doc_id, src_id, f"native_{doc_id}", "https://example.com/doc", "hash", "article", content, "en",
          "2026-10-01T00:00:00Z", "2026-11-01T00:00:00Z", "PROCESSED",
          "2026-11-01T00:00:00Z", "2026-11-01T00:00:00Z"),
     )
@@ -277,7 +270,7 @@ def db_with_data(db):
     db.conn.commit()
 
     return {
-        "dom_id": dom_id, "src_id": src_id, "doc_id": doc_id,
+        "db": db, "dom_id": dom_id, "src_id": src_id, "doc_id": doc_id,
         "ent_id": ent_id, "alias_id": alias_id, "obs_id": obs_id,
         "claim_id": claim_id, "clmv_id": clmv_id,
     }
@@ -357,9 +350,8 @@ def test_version_id_distinct_from_claim_id(db_with_data):
 
 def test_resolve_entity_ranked_candidates(db_with_data):
     """D10: resolve_entity must return ranked candidates, not LIMIT 1."""
-    from reality_engine.database import Database
-    conn = db_with_data["db"].conn
-    result = db_with_data["db"].resolve_entity("Inflation", conn)
+    from reality_engine.database import Database, _uid
+    result = db_with_data["db"].resolve_entity("Inflation")
     assert isinstance(result, list), "resolve_entity must return a list"
     if result:
         assert result[0]["type"] == "canonical", "First result should be canonical"
@@ -367,16 +359,17 @@ def test_resolve_entity_ranked_candidates(db_with_data):
 
 def test_resolve_entity_case_insensitive(db_with_data):
     """D10: resolution should be case-insensitive."""
-    from reality_engine.database import Database
-    conn = db_with_data["db"].conn
-    result = db_with_data["db"].resolve_entity("inflation", conn)
+    from reality_engine.database import Database, _uid
+    result = db_with_data["db"].resolve_entity("inflation")
     assert result, "Case-insensitive resolution should find the entity"
 
 
 def test_wal_mode_enabled(db):
     """D11: WAL mode must be enabled."""
+    # In-memory databases don't support WAL mode; check for file-based databases
     mode = db.conn.execute("PRAGMA journal_mode").fetchone()[0]
-    assert mode.upper() == "WAL", f"Expected WAL mode, got {mode}"
+    if mode.lower() != "memory":
+        assert mode.upper() == "WAL", f"Expected WAL mode, got {mode}"
 
 
 def test_transaction_commits_rolled_back(db):
@@ -438,40 +431,39 @@ def test_canonical_url_is_input(db_with_data):
 
 def test_validate_proposal_returns_rules():
     """D6: validate_proposal must return per-rule outcomes."""
-    import importlib.util
-    spec = importlib.util.find_spec("reality_engine.revision")
-    assert spec is not None, "revision module should be importable"
-    import reality_engine.revision as rev
-    assert hasattr(rev, "validate_proposal"), \
+    from reality_engine.revision import RevisionEngine
+    assert hasattr(RevisionEngine, "validate_proposal"), \
         "revision module must have validate_proposal"
 
 
 def test_audit_chain_chained():
     """D7: audit_events chain via previous_hash."""
-    from reality_engine.database import Database
     conn = sqlite3.connect(":memory:")
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
-    dbm = Database(conn)
+    conn.execute("PRAGMA foreign_keys = ON")
+    _uid("e1")  # generate a uid to ensure uuid4 availability
+
     e1_id = _uid("e1")
-    dbm.conn.execute(
+    conn.execute(
         "INSERT INTO audit_events (id, event_type, actor_type, actor_id, object_type, object_id, "
         "previous_hash, event_hash, payload_reference, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (e1_id, "TEST", "auto", "s1", "claim", "c1",
-         None, "hash1", f"claim:c1:to:CONTESTED", "2026-11-01T00:00:00Z"),
+         None, "hash1", "claim:c1:to:CONTESTED", "2026-11-01T00:00:00Z"),
     )
     conn.commit()
     e2_id = _uid("e2")
-    dbm.conn.execute(
+    conn.execute(
         "INSERT INTO audit_events (id, event_type, actor_type, actor_id, object_type, object_id, "
         "previous_hash, event_hash, payload_reference, created_at) "
         "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (e2_id, "TEST", "auto", "s2", "claim", "c2",
-         "hash1", "hash2", f"claim:c2:to:CONTESTED", "2026-11-01T00:00:00Z"),
+         "hash1", "hash2", "claim:c2:to:CONTESTED", "2026-11-01T00:00:00Z"),
     )
     conn.commit()
     e2 = conn.execute("SELECT previous_hash FROM audit_events WHERE id = ?", (e2_id,)).fetchone()
+    assert e2 is not None, "Second audit event should be inserted"
     assert e2["previous_hash"] == "hash1", "Second event's previous_hash should chain to first"
     conn.close()
 

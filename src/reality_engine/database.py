@@ -5,6 +5,7 @@ All database operations are transactional.
 """
 
 import hashlib
+from typing import Optional, Type, Any, Literal
 from uuid import uuid4
 import sqlite3
 from pathlib import Path
@@ -300,13 +301,15 @@ class _Transaction:
 
     def __init__(self, conn: sqlite3.Connection):
         self.conn = conn
+        self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.execute("PRAGMA busy_timeout = 5000")
         self._closed = False
 
-    def __enter__(self):
+    def __enter__(self) -> "_Transaction":
         self.conn.execute("BEGIN")
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_val: Any, exc_tb: Any) -> Literal[False]:
         if exc_type is not None:
             self.conn.rollback()
         else:
@@ -321,19 +324,30 @@ class Database:
 
     def __init__(self, path: Path):
         self.path = path
-        self.conn = sqlite3.connect(str(path))
-        self.conn.row_factory = sqlite3.Row
+        self.conn = self._connect(path)
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA busy_timeout = 5000")
         self.conn.executescript(SCHEMA)
         self.conn.commit()
+        self.conn.row_factory = sqlite3.Row
+
+    def _connect(self, path: Path) -> sqlite3.Connection:
+        """Connect to the database.
+
+        Accepts either a path-like object (str/Path) or a sqlite3.Connection.
+        When a connection is provided, it is used directly; otherwise a new
+        connection is opened at the given path.
+        """
+        if isinstance(path, sqlite3.Connection):
+            return path
+        return sqlite3.connect(str(path))
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
 
-    def transaction(self):
-        """Context manager for atomic transactions.
+    def transaction(self) -> "_Transaction":
+        """Context manager for atomic database transactions.
 
         All database operations within the with block succeed or fail together.
         """
@@ -396,7 +410,7 @@ class Database:
     # ── Entities ───────────────────────────────────────────────────────────────
 
     def register_entity(self, canonical_name: str, entity_type: str,
-                        domain_id: str = None, aliases: list = None) -> str:
+                        domain_id: Optional[str] = None, aliases: Optional[list] = None) -> str:
         """Register an entity with optional aliases.
 
         Args:
@@ -426,7 +440,7 @@ class Database:
         self.conn.commit()
         return ent_id
 
-    def resolve_entity(self, name: str, limit: int = 3) -> list:
+    def resolve_entity(self, name: str, limit: int = 3) -> list[dict[str, Any]]:
         """Resolve an entity by canonical name or alias (case-insensitive).
 
         Args:
@@ -472,17 +486,17 @@ class Database:
         candidates.sort(key=lambda x: x["rank"])
         return [c for c in candidates[:limit]]
 
-    def get_entity_by_id(self, entity_id: str) -> dict:
+    def get_entity_by_id(self, entity_id: str) -> Optional[dict[str, Any]]:
         row = self.conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
         return dict(row) if row else None
 
-    def get_entities_by_type(self, entity_type: str) -> list:
+    def get_entities_by_type(self, entity_type: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             "SELECT * FROM entities WHERE entity_type = ? ORDER BY canonical_name", (entity_type,)
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_all_entities(self) -> list:
+    def get_all_entities(self) -> list[dict[str, Any]]:
         rows = self.conn.execute("SELECT * FROM entities ORDER BY canonical_name").fetchall()
         return [dict(r) for r in rows]
 
@@ -502,7 +516,7 @@ class Database:
         self.conn.commit()
         return obs_id
 
-    def get_observations_for_entity(self, entity_id: str) -> list:
+    def get_observations_for_entity(self, entity_id: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             "SELECT * FROM observations WHERE subject_id = ? ORDER BY recorded_at", (entity_id,)
         ).fetchall()
@@ -515,7 +529,7 @@ class Database:
         ).fetchone()
         return dict(row) if row else None
 
-    def get_observations_by_source_span(self, source_span_id: str) -> list:
+    def get_observations_by_source_span(self, source_span_id: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             "SELECT o.* FROM observations o JOIN evidence_links el ON el.observation_id = o.id"
             " WHERE el.source_span_id = ? ORDER BY o.recorded_at", (source_span_id,)
@@ -556,8 +570,8 @@ class Database:
         self.conn.commit()
         return evt_id
 
-    def get_events(self, event_type: str = None, start_date: str = None,
-                   end_date: str = None) -> list:
+    def get_events(self, event_type: Optional[str] = None, start_date: Optional[str] = None,
+                   end_date: Optional[str] = None) -> list[dict[str, Any]]:
         """Query events by type and/or date range.
 
         Returns a list of event dictionaries.
@@ -581,10 +595,10 @@ class Database:
 
     def register_relationship(self, relationship_type: str,
                               subject_id: str, object_id: str,
-                              predicate: str = None,
-                              valid_from: str = None, valid_to: str = None,
-                              recorded_at: str = None,
-                              source_id: str = None, document_id: str = None) -> str:
+                              predicate: Optional[str] = None,
+                              valid_from: Optional[str] = None, valid_to: Optional[str] = None,
+                              recorded_at: Optional[str] = None,
+                              source_id: Optional[str] = None, document_id: Optional[str] = None) -> str:
         """Register a typed relationship between entities.
 
         Args:
@@ -615,7 +629,7 @@ class Database:
         self.conn.commit()
         return rel_id
 
-    def get_relationships_for_entity(self, entity_id: str, direction: str = "outgoing") -> list:
+    def get_relationships_for_entity(self, entity_id: str, direction: str = "outgoing") -> list[dict[str, Any]]:
         """Get relationships for an entity (outgoing or incoming).
 
         direction: 'outgoing' (the entity is subject), 'incoming' (the entity is object).
@@ -634,7 +648,7 @@ class Database:
     def submit_claim(self, subject_id: str, predicate: str, object_value: str,
                      claim_type: str, domain_id: str, document_id: str,
                      source_span_id: str, status: str = "SUPPORTED",
-                     recorded_at: str = None) -> str:
+                     recorded_at: Optional[str] = None) -> str:
         """Submit a new claim version and link it to its source span.
 
         Args:
@@ -685,23 +699,23 @@ class Database:
         row = self.conn.execute("SELECT * FROM claims WHERE id = ?", (claim_id,)).fetchone()
         return dict(row) if row else None
 
-    def get_claims_by_subject(self, subject_id: str) -> list:
+    def get_claims_by_subject(self, subject_id: str) -> list[dict[str, Any]]:
         rows = self.conn.execute(
             "SELECT * FROM claims WHERE subject_id = ? ORDER BY recorded_at", (subject_id,)
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def list_claims_for_entity(self, entity_id: str) -> list:
+    def list_claims_for_entity(self, entity_id: str) -> list[dict[str, Any]]:
         return [dict(r) for r in self.conn.execute(
             "SELECT c.* FROM claims c JOIN entities e ON c.subject_id = e.id WHERE e.id = ?", (entity_id,)
         ).fetchall()]
 
-    def get_evidence_links_for_claim(self, claim_id: str) -> list:
+    def get_evidence_links_for_claim(self, claim_id: str) -> list[dict[str, Any]]:
         return [dict(r) for r in self.conn.execute(
             "SELECT * FROM evidence_links WHERE claim_id = ?", (claim_id,)
         ).fetchall()]
 
-    def get_claims_with_provenance(self, entity_id: str) -> list:
+    def get_claims_with_provenance(self, entity_id: str) -> list[dict[str, Any]]:
         """Get claims for an entity with source-span provenance.
 
         FIX: Join through evidence_links.source_span_id.
@@ -716,12 +730,12 @@ class Database:
         """, (entity_id,)).fetchall()
         return [dict(r) for r in rows]
 
-    def get_claim_versions(self, claim_id: str) -> list:
+    def get_claim_versions(self, claim_id: str) -> list[dict[str, Any]]:
         return [dict(r) for r in self.conn.execute(
             "SELECT * FROM claim_versions WHERE claim_id = ? ORDER BY created_at", (claim_id,)
         ).fetchall()]
 
-    def get_claim_version(self, claim_id: str, revision_number: int) -> dict:
+    def get_claim_version(self, claim_id: str, revision_number: int) -> Optional[dict[str, Any]]:
         row = self.conn.execute(
             "SELECT * FROM claim_versions WHERE claim_id = ? AND revision_number = ?",
             (claim_id, revision_number)

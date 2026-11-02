@@ -12,17 +12,17 @@ Example:
 """
 
 import sqlite3
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import datetime
+from typing import Type, Any, Literal
 
 # ── Bitemporal helpers ──────────────────────────────────────────────────────────
 
-def parse_iso8601(value: Optional[str]) -> Optional[datetime]:
+def parse_iso8601(value: str | None) -> datetime | None:
     """Parse ISO 8601 timestamp, returning None for 'None' or empty."""
     if value is None or value == "None" or value == "":
         return None
     try:
-        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return datetime.fromisoformat(value)
     except (ValueError, AttributeError):
         return None
 
@@ -32,8 +32,8 @@ def format_iso8601(dt: datetime) -> str:
     return dt.isoformat().replace("+00:00", "Z")
 
 
-def bitemporal_key(recorded_at: str, valid_from: Optional[str] = None,
-                   valid_to: Optional[str] = None) -> tuple:
+def bitemporal_key(recorded_at: str, valid_from: str | None = None,
+                   valid_to: str | None = None) -> tuple[str, str, str]:
     """Compute a deterministic bitemporal sort key."""
     return (recorded_at or "", valid_from or "", valid_to or "")
 
