@@ -221,15 +221,23 @@ class RevisionEngine:
 
             # Record the audit event
             audit_id = self._uid("aud")
+            prev_row = db_conn.execute(
+                "SELECT event_hash FROM audit_events ORDER BY created_at DESC, id DESC LIMIT 1"
+            ).fetchone()
+            prev_audit_hash = prev_row[0] if prev_row else None
+            payload = {"revision_id": rev_event_id, "claim_id": claim_id,
+                       "new_status": "CONTESTED", "created_at": now}
+            import json as _json
+            event_hash = hashlib.sha256(
+                ((prev_audit_hash or "") + _json.dumps(payload, sort_keys=True)).encode("utf-8")
+            ).hexdigest()
             db_conn.execute(
                 "INSERT INTO audit_events (id, event_type, actor_type, actor_id, object_type, object_id, "
                 "previous_hash, event_hash, payload_reference, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (audit_id, "REVISION_COMMITTED", "Systems Integrator", "auto",
                  "claim", claim_id,
-                 None,  # event_hash filled below
-                 hashlib.sha256(
-                     f"{rev_event_id}:CONTESTED:{now}".encode("utf-8")).hexdigest(),
+                 prev_audit_hash, event_hash,
                  f"claim:{claim_id}:to:CONTESTED", now),
             )
 
@@ -249,6 +257,18 @@ class RevisionEngine:
             "previous_claim_version_id": previous_version["id"],
             "resulting_claim_version_id": result_version_id,
         }
+
+    def verify_audit_chain(self) -> object:
+        """Return 'OK' if chain intact, else index of first broken event."""
+        rows = self.db.conn.execute(
+            "SELECT previous_hash, event_hash, payload_reference, created_at, id FROM audit_events ORDER BY created_at, id"
+        ).fetchall()
+        prev = None
+        for i, r in enumerate(rows):
+            if (r[0] if not hasattr(r, "keys") else r["previous_hash"]) != prev:
+                return i
+            prev = r[1] if not hasattr(r, "keys") else r["event_hash"]
+        return "OK"
 
     def compute_state_hash(self, entity_id: str) -> str:
         """Compute a hash of the current world state for this entity.
