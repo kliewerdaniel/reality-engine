@@ -5,6 +5,7 @@ All database operations are transactional.
 """
 
 import hashlib
+from uuid import uuid4
 import sqlite3
 from pathlib import Path
 from datetime import datetime, timezone
@@ -40,6 +41,7 @@ CREATE TABLE IF NOT EXISTS documents (
     canonical_url TEXT,
     content_hash TEXT,
     content_type TEXT,
+    content TEXT NOT NULL,
     language TEXT,
     published_at TEXT,
     collected_at TEXT NOT NULL,
@@ -289,8 +291,27 @@ CREATE INDEX IF NOT EXISTS idx_events_occurred_at ON events(occurred_at);
 # ── Helpers ─────────────────────────────────────────────────────────────────────
 
 def _uid(prefix: str) -> str:
-    """Generate a unique identifier."""
-    return f"{prefix}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{hashlib.md5(str(id(datetime.now())).encode()).hexdigest()[:8]}"
+    """Generate a unique identifier using uuid4 (collision-free)."""
+    return f"{prefix}__{uuid4().hex}"
+
+
+class _Transaction:
+    """Context manager for atomic database transactions."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self.conn = conn
+        self._closed = False
+
+    def __enter__(self):
+        self.conn.execute("BEGIN")
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_type is not None:
+            self.conn.rollback()
+        else:
+            self.conn.commit()
+        return False
 
 
 # ── Database class ─────────────────────────────────────────────────────────────
@@ -303,11 +324,20 @@ class Database:
         self.conn = sqlite3.connect(str(path))
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
+        self.conn.execute("PRAGMA journal_mode = WAL")
+        self.conn.execute("PRAGMA busy_timeout = 5000")
         self.conn.executescript(SCHEMA)
         self.conn.commit()
 
     def _now(self) -> str:
         return datetime.now(timezone.utc).isoformat()
+
+    def transaction(self):
+        """Context manager for atomic transactions.
+
+        All database operations within the with block succeed or fail together.
+        """
+        return _Transaction(self.conn)
 
     # ── Domains ────────────────────────────────────────────────────────────────
 
@@ -341,10 +371,10 @@ class Database:
         content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
         self.conn.execute(
             "INSERT INTO documents (id, source_id, source_native_id, canonical_url, content_hash,"
-            " content_type, language, published_at, collected_at, processing_status, created_at, updated_at)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            " content_type, content, language, published_at, collected_at, processing_status, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (doc_id, source_id, f"native_{doc_id}", "https://example.com/doc",
-             content_hash, content_type, language, published_at,
+             content_hash, content_type, content, language, published_at,
              self._now(), "PROCESSED", self._now(), self._now()),
         )
         self.conn.commit()
@@ -396,19 +426,51 @@ class Database:
         self.conn.commit()
         return ent_id
 
-    def resolve_entity(self, name: str) -> str:
-        """Resolve an entity by canonical name or alias.
+    def resolve_entity(self, name: str, limit: int = 3) -> list:
+        """Resolve an entity by canonical name or alias (case-insensitive).
 
-        Returns the entity ID if found, None otherwise.
+        Args:
+            name: The name to resolve (canonical or alias).
+            limit: Maximum number of candidates to return.
+
+        Returns:
+            List of candidate entity dicts, ranked by match quality.
+            Empty list if no match found.
         """
         normalized = name.lower().strip()
-        row = self.conn.execute(
-            "SELECT e.id FROM entities e"
-            " LEFT JOIN entity_aliases a ON a.entity_id = e.id"
-            " WHERE e.canonical_name = ? OR a.normalized = ?"
-            " LIMIT 1", (name, normalized)
-        ).fetchone()
-        return row["id"] if row else None
+        if not normalized:
+            return []
+
+        # Query for exact match on canonical name (case-insensitive)
+        canonical_matches = self.conn.execute(
+            "SELECT e.id, e.canonical_name, e.entity_type, e.domain_id, e.created_at, e.status, 1 as rank"
+            " FROM entities e"
+            " WHERE lower(e.canonical_name) = ?"
+            " ORDER BY e.created_at", (normalized,)
+        ).fetchall()
+
+        # Query for alias match (case-insensitive)
+        alias_matches = self.conn.execute(
+            "SELECT e.id, e.canonical_name, e.entity_type, e.domain_id, e.created_at, e.status, 2 as rank"
+            " FROM entities e JOIN entity_aliases a ON a.entity_id = e.id"
+            " WHERE lower(a.alias) = ?"
+            " ORDER BY e.created_at", (normalized,)
+        ).fetchall()
+
+        # Combine and rank
+        candidates = []
+        for row in canonical_matches:
+            c = dict(row)
+            c["type"] = "canonical"
+            candidates.append(c)
+        for row in alias_matches:
+            c = dict(row)
+            c["type"] = "alias"
+            candidates.append(c)
+
+        # Sort by rank
+        candidates.sort(key=lambda x: x["rank"])
+        return [c for c in candidates[:limit]]
 
     def get_entity_by_id(self, entity_id: str) -> dict:
         row = self.conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
@@ -445,6 +507,13 @@ class Database:
             "SELECT * FROM observations WHERE subject_id = ? ORDER BY recorded_at", (entity_id,)
         ).fetchall()
         return [dict(r) for r in rows]
+
+    def get_source_span(self, span_id: str) -> dict:
+        """Retrieve a source span by ID."""
+        row = self.conn.execute(
+            "SELECT * FROM source_spans WHERE id = ?", (span_id,)
+        ).fetchone()
+        return dict(row) if row else None
 
     def get_observations_by_source_span(self, source_span_id: str) -> list:
         rows = self.conn.execute(
@@ -592,13 +661,15 @@ class Database:
             (claim_id, subject_id, predicate, object_value, claim_type, domain_id,
              document_id, recorded_at, recorded_at, status, recorded_at, recorded_at),
         )
-        # Create a claim version record
+        # Insert a claim version (no time conflation: valid_to stays NULL)
+        # Version ID is distinct from claim ID
+        result_version_id = _uid("clmv")
         self.conn.execute(
             "INSERT INTO claim_versions (id, claim_id, subject_id, predicate, object_value,"
             " claim_type, domain_id, document_id, valid_from, valid_to, recorded_at, status, revision_number, created_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
-            (claim_id, claim_id, subject_id, predicate, object_value, claim_type, domain_id,
-             document_id, recorded_at, recorded_at, recorded_at, status, recorded_at),
+            (result_version_id, claim_id, subject_id, predicate, object_value, claim_type, domain_id,
+             document_id, recorded_at, None, recorded_at, status, recorded_at),
         )
         # Link the claim to the source passage
         evl_id = _uid("evl")

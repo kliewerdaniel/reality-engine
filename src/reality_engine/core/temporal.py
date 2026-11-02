@@ -80,44 +80,76 @@ def get_relationships_since(conn, since: str) -> list:
 
 def reconstruct_observations_at(
     conn: sqlite3.Connection,
-    entity_id: str,
-    timestamp: str
+    entity_id: str = None,
+    timestamp: str = None
 ) -> list:
     """Reconstruct what the system understood about an entity at a given point in time.
 
     Uses recorded_at (transaction time) as the cutoff: only observations recorded
     before or at `timestamp` are included in the reconstruction.
 
+    If entity_id is None, all observations up to the timestamp are returned.
+
     Args:
         conn: SQLite connection.
-        entity_id: The entity ID.
+        entity_id: The entity ID. If None, returns all observations.
         timestamp: The time of reconstruction (ISO 8601).
 
     Returns:
         List of observations recorded at or before the timestamp.
     """
-    rows = conn.execute(
-        "SELECT * FROM observations"
-        " WHERE subject_id = ? AND recorded_at <= ?"
-        " ORDER BY recorded_at", (entity_id, timestamp)
-    ).fetchall()
+    if entity_id:
+        query = (
+            "SELECT * FROM observations"
+            " WHERE subject_id = ? AND recorded_at <= ?"
+            " ORDER BY recorded_at"
+        )
+        params = (entity_id, timestamp)
+    else:
+        query = (
+            "SELECT * FROM observations"
+            " WHERE recorded_at <= ?"
+            " ORDER BY recorded_at"
+        )
+        params = (timestamp,)
+    rows = conn.execute(query, params).fetchall()
     return [dict(r) for r in rows]
 
 
 def reconstruct_claims_at(
     conn: sqlite3.Connection,
-    entity_id: str,
-    timestamp: str
+    entity_id: str = None,
+    timestamp: str = None
 ) -> list:
-    """Reconstruct the system's understanding of a claim at a given time.
+    """Reconstruct what the system's understanding of a claim at a given time.
 
     Returns claim versions recorded before or at the timestamp.
+
+    If entity_id is None, all claims up to the timestamp are returned.
+
+    Args:
+        conn: SQLite connection.
+        entity_id: The entity ID. If None, returns all claims.
+        timestamp: The time of reconstruction (ISO 8601).
+
+    Returns:
+        List of claims recorded at or before the timestamp.
     """
-    rows = conn.execute(
-        "SELECT * FROM claims"
-        " WHERE subject_id = ? AND recorded_at <= ?"
-        " ORDER BY recorded_at", (entity_id, timestamp)
-    ).fetchall()
+    if entity_id:
+        query = (
+            "SELECT * FROM claims"
+            " WHERE subject_id = ? AND recorded_at <= ?"
+            " ORDER BY recorded_at"
+        )
+        params = (entity_id, timestamp)
+    else:
+        query = (
+            "SELECT * FROM claims"
+            " WHERE recorded_at <= ?"
+            " ORDER BY recorded_at"
+        )
+        params = (timestamp,)
+    rows = conn.execute(query, params).fetchall()
     return [dict(r) for r in rows]
 
 
@@ -158,12 +190,14 @@ def materialize_world_state_at(
     """
     claims = reconstruct_claims_at(conn, None, timestamp)
     observations = reconstruct_observations_at(conn, None, timestamp)
-    entities = conn.execute("SELECT * FROM entities ORDER BY canonical_name").fetchall()
+    entities = []
+    for row in conn.execute("SELECT * FROM entities ORDER BY canonical_name").fetchall():
+        entities.append(dict(row))
     relationships = get_relationships_since(conn, timestamp)
     events = reconstruct_events_at(conn, None, timestamp)
     revision_count = conn.execute(
         "SELECT COUNT(*) as c FROM revisions WHERE created_at <= ?", (timestamp,)
-    ).fetchone()["c"]
+    ).fetchone()[0]
 
     return {
         "entities": [dict(r) for r in entities],

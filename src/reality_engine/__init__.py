@@ -14,11 +14,14 @@ from reality_engine.core.temporal import (
     get_relationships_since,
 )
 
+# Public API
+from reality_engine.database import Database
+
 __all__ = [
     "Database",
     "bitemporal_key",
-    "parse_iso8601",
     "format_iso8601",
+    "parse_iso8601",
     "get_observations_in_interval",
     "get_observations_since",
     "get_relationships_in_interval",

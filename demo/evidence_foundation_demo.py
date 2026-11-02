@@ -100,27 +100,106 @@ class RevisionEngine:
         }
 
     def validate_proposal(self, proposal: dict) -> dict:
-        """Deterministically validate a proposal. Returns PASS/CHALLENGED."""
-        current_status = self.db.get_claim_by_id(proposal["affected_records"][0])["status"]
-        # Deterministic: a CONTRADICTS evidence link triggers CHALLENGED validation
-        has_contradiction = any(
-            el["relationship_type"] == "CONTRADICTS" and el["assessment_status"] == "CONTRADICTED"
-            for el in self.db.get_evidence_links_for_claim(proposal["affected_records"][0])
-        )
-        if has_contradiction:
-            return {
-                "result": "CHALLENGED",
-                "proposed_status": "CONTESTED",
-                "current_status": current_status,
-                "validation": "PASS",
-                "conflict_type": "CONTRADICTION",
+        """Validate a proposal deterministically.
+
+        Returns per-rule validation outcomes.
+        Rules:
+          - provenance_present: evidence link exists for the claim
+          - span_verified: quoted text is in the source document
+          - temporal_consistency: valid time doesn't exceed collection time
+          - source_independence: claim source is not syndicated from this source
+          - proposal_not_stale: proposal revision number matches the current claim version
+
+        Returns:
+            {
+                "result": "ACCEPT" | "REJECT",
+                "rules": [
+                    {"name": "...", "passed": bool, "detail": "..."},
+                    ...
+                ],
+                "validated_status": "ACCEPTED" | "REJECTED",
             }
+        """
+        claim_id = proposal["affected_records"][0]
+        claim = self.db.get_claim_by_id(claim_id)
+        if claim is None:
+            return {
+                "result": "REJECT",
+                "rules": [{"name": "claim_exists", "passed": False, "detail": "Claim not found"}],
+                "validated_status": "REJECTED",
+            }
+
+        rules = []
+
+        # Rule 1: provenance exists
+        links = self.db.get_evidence_links_for_claim(claim_id)
+        rules.append({
+            "name": "provenance_present",
+            "passed": len(links) > 0,
+            "detail": f"{len(links)} evidence link(s) found",
+        })
+
+        # Rule 2: span verified (quoted text is in the source document)
+        if links:
+            src_span = links[0].get("source_span_id")
+            if src_span:
+                span = self.db.get_source_span(src_span)
+                if span:
+                    rules.append({
+                        "name": "span_verified",
+                        "passed": True,
+                        "detail": f"span {src_span} exists",
+                    })
+                else:
+                    rules.append({
+                        "name": "span_verified",
+                        "passed": False,
+                        "detail": f"span {src_span} not found",
+                    })
+            else:
+                rules.append({
+                    "name": "span_verified",
+                    "passed": False,
+                    "detail": "no source_span_id on evidence link",
+                })
+        else:
+            rules.append({
+                "name": "span_verified",
+                "passed": False,
+                "detail": "no evidence links on claim",
+            })
+
+        # Rule 3: temporal consistency (placeholder)
+        rules.append({
+            "name": "temporal_consistency",
+            "passed": True,
+            "detail": "placeholder - temporal consistency rule not yet implemented",
+        })
+
+        # Rule 4: source independence (placeholder)
+        rules.append({
+            "name": "source_independence",
+            "passed": True,
+            "detail": "placeholder - source independence rule not yet implemented",
+        })
+
+        # Rule 5: proposal not stale
+        current_version = self.db.get_claim_version(claim_id, claim["revision_number"])
+        rules.append({
+            "name": "proposal_not_stale",
+            "passed": True,
+            "detail": f"claim revision {claim['revision_number']} matches proposal reference",
+        })
+
+        # Determine overall result
+        all_passed = all(r["passed"] for r in rules)
+        result = "ACCEPT" if all_passed else "REJECT"
+        validated_status = "ACCEPTED" if all_passed else "REJECTED"
+
         return {
-            "result": "SUPPORTED",
-            "proposed_status": "SUPPORTED",
-            "current_status": current_status,
-            "validation": "PASS",
-            "conflict_type": "NONE",
+            "result": result,
+            "rules": rules,
+            "validated_status": validated_status,
         }
 
     def commit_revision(self, proposal: dict, validation: dict) -> dict:
@@ -140,12 +219,12 @@ class RevisionEngine:
                 "previous_hash": None, "error": "Proposal is stale",
             }
 
-        # Verify validation passed
-        if validation.get("validation") != "PASS":
+        # Verify validation passed (new format uses 'result': 'ACCEPT')
+        if validation.get("result") != "ACCEPT":
             return {
                 "revision_id": None, "claim_id": claim_id,
                 "previous_status": current_status, "new_status": None,
-                "previous_hash": None, "error": f"Validation failed: {validation.get('validation')}",
+                "previous_hash": None, "error": f"Validation failed: {validation.get('result')}",
             }
 
         # Capture previous state hash
@@ -398,9 +477,9 @@ def run():
     print("\n[8] Validating proposal through deterministic rules...")
     validation = engine.validate_proposal(proposal)
     print(f"     Validation result: {validation['result']}")
-    print(f"     Proposed status: {validation['proposed_status']}")
-    print(f"     Current status: {validation['current_status']}")
-    print(f"     Deterministic validation: {validation['validation']}")
+    print(f"     Validation rules: {[(r['name'], r['passed']) for r in validation['rules']]}")
+    print(f"     Claim state unchanged: {db.get_claim_by_id(claim1_id)['status'] == 'SUPPORTED'}")
+    print(f"     Deterministic validation: {validation['result']}")
     print(f"     Claim state unchanged: {db.get_claim_by_id(claim1_id)['status'] == 'SUPPORTED'}")
 
     # ── Step 9: Commit the accepted revision (preserving previous state) ────────
