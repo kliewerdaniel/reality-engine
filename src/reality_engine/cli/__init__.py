@@ -49,11 +49,19 @@ def cmd_trace(args: argparse.Namespace) -> int:
     claims = conn.execute("SELECT id, document_id FROM claims").fetchall()
     for c in claims:
         doc_id = c["document_id"]
+        span = conn.execute(
+            "SELECT id FROM source_spans WHERE document_id=? LIMIT 1", (doc_id,)
+        ).fetchone()
+        # prefer evidence-linked span
+        ev = conn.execute(
+            "SELECT source_span_id FROM evidence_links WHERE claim_id=?", (c["id"],)
+        ).fetchone()
+        span_id = ev["source_span_id"] if ev and ev["source_span_id"] else (span["id"] if span else None)
         doc = conn.execute("SELECT id, source_id, content_hash FROM documents WHERE id=?", (doc_id,)).fetchone()
         source = None
         if doc:
             source = conn.execute("SELECT id, name FROM sources WHERE id=?", (doc["source_id"],)).fetchone()
-        line = f"claim={c['id']} -> document={doc_id}"
+        line = f"claim={c['id']} -> span={span_id} -> document={doc_id}"
         if doc:
             line += f" (hash={doc['content_hash']})"
         if source:
