@@ -322,8 +322,9 @@ class _Transaction:
 class Database:
     """SQLite database wrapper with transactional operations."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, clock=None):
         self.path = path
+        self.clock = clock
         self.conn = self._connect(path)
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.execute("PRAGMA journal_mode = WAL")
@@ -344,7 +345,9 @@ class Database:
         return sqlite3.connect(str(path))
 
     def _now(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        from reality_engine.core.clock import SystemClock, canonical_utc
+        clk = self.clock if self.clock is not None else SystemClock()
+        return canonical_utc(clk.now())
 
     def transaction(self) -> "_Transaction":
         """Context manager for atomic database transactions.
