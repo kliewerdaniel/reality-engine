@@ -72,7 +72,6 @@ def test_f11_relationships_filter():
     recs = sorted(r["recorded_at"] for r in snap["relationships"])
     assert recs == ["2026-10-02T00:00:00Z"]
 
-@pytest.mark.xfail(strict=True, reason="F-12")
 def test_f12_hindsight_events():
     import tempfile, pathlib
     from reality_engine.database import Database

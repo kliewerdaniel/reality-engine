@@ -197,11 +197,12 @@ def materialize_world_state_at(
     claims = reconstruct_claims_at(conn, None, timestamp)
     observations = reconstruct_observations_at(conn, None, timestamp)
     entities = []
-    for row in conn.execute("SELECT * FROM entities ORDER BY canonical_name").fetchall():
+    for row in conn.execute("SELECT * FROM entities WHERE created_at <= ? ORDER BY canonical_name", (timestamp,)).fetchall():
         entities.append(dict(row))
     rows = conn.execute("SELECT * FROM relationships WHERE recorded_at <= ? ORDER BY recorded_at", (timestamp,)).fetchall()
     relationships = [dict(r) for r in rows]
-    events = reconstruct_events_at(conn, None, timestamp)
+    ev_rows = conn.execute("SELECT * FROM events WHERE recorded_at <= ? ORDER BY recorded_at", (timestamp,)).fetchall()
+    events = [dict(r) for r in ev_rows]
     revision_count = conn.execute(
         "SELECT COUNT(*) as c FROM revisions WHERE created_at <= ?", (timestamp,)
     ).fetchone()[0]
