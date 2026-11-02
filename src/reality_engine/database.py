@@ -393,16 +393,25 @@ class Database:
     # ── Documents ───────────────────────────────────────────────────────────────
 
     def ingest_document(self, source_id: str, content: str, content_type: str,
-                        language: str, published_at: str) -> str:
-        doc_id = _uid("doc")
+                        language: str, published_at: str,
+                        canonical_url=None, source_native_id=None,
+                        collected_at=None, processing_status=None) -> str:
         content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        existing = self.conn.execute(
+            "SELECT id FROM documents WHERE source_id=? AND content_hash=?", (source_id, content_hash)
+        ).fetchone()
+        if existing:
+            return existing["id"] if hasattr(existing, "keys") else existing[0]
+        doc_id = _uid("doc")
+        if collected_at is None:
+            collected_at = self._now()
         self.conn.execute(
             "INSERT INTO documents (id, source_id, source_native_id, canonical_url, content_hash,"
             " content_type, content, language, published_at, collected_at, processing_status, created_at, updated_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (doc_id, source_id, f"native_{doc_id}", "https://example.com/doc",
+            (doc_id, source_id, source_native_id, canonical_url,
              content_hash, content_type, content, language, published_at,
-             self._now(), "PROCESSED", self._now(), self._now()),
+             collected_at, processing_status, self._now(), self._now()),
         )
         self.conn.commit()
         return doc_id

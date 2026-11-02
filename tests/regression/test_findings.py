@@ -1,6 +1,5 @@
 import pytest
 
-@pytest.mark.xfail(strict=True, reason="F-03")
 def test_f03_fabricates_canonical_url():
     import tempfile, pathlib
     from reality_engine.database import Database
@@ -11,7 +10,6 @@ def test_f03_fabricates_canonical_url():
     row = db.conn.execute("SELECT canonical_url FROM documents WHERE id=?", (doc,)).fetchone()
     assert row["canonical_url"] is None
 
-@pytest.mark.xfail(strict=True, reason="F-04")
 def test_f04_deduplication():
     import tempfile, pathlib
     from reality_engine.database import Database
@@ -196,7 +194,6 @@ def test_f15_audit_chain():
     from reality_engine.revision import RevisionEngine
     assert hasattr(RevisionEngine, "verify_audit_chain")
 
-@pytest.mark.xfail(strict=True, reason="F-01")
 def test_f01_timestamp_canonical():
     import tempfile, pathlib
     from reality_engine.database import Database
