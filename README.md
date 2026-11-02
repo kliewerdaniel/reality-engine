@@ -2,7 +2,7 @@
 
 **Reality Engine** is a continuously operating computational system that constructs, maintains, evaluates, and revises a global representation of the world using observations collected from heterogeneous information sources.
 
-**Status:** Architecture specification v0.1.0 — documentation phase (November 2026)
+**Status:** Remediation branch `hermes/remediate-and-m1` — Phases 0–4 complete; Phases 5–7 in progress (November 2026)
 **Author:** Daniel Kliewer
 **Classification:** Open research and software architecture
 **Implementation philosophy:** Local-first, evidence-grounded, temporally consistent, continuously revisable intelligence infrastructure.
