@@ -1,57 +1,40 @@
-# Reality Engine STATUS
+# Reality Engine — Status (generated; do not edit by hand)
 
-Last updated: 2026-11-02 (Hermes cleanup run)
+## Findings
 
-## Component Status
-
-| Component | Specified | Implemented | Tested | Stub |
-|-----------|-----------|-------------|--------|------|
-| Package install (pyproject.toml) | ✅ | ✅ | ✅ | — |
-| Database layer (SQLite) | ✅ | ✅ | ✅ | — |
-| Temporal model (bitemporal) | ✅ | ✅ | ✅ | — |
-| Entity registry (with aliases) | ✅ | ✅ | ✅ | — |
-| Event registry | ✅ | ✅ | ✅ | — |
-| Typed relationships | ✅ | ✅ | ✅ | — |
-| Evidence chains (spans/source) | ✅ | ✅ | ✅ | — |
-| Claim versions (history) | ✅ | ✅ | ✅ | — |
-| Revision engine | ✅ | ✅ | ✅ | — |
-| Audit chain | ✅ | ✅ | ✅ | — |
-| Tests (pytest) | — | ✅ | ✅ (20 tests) | — |
-| CI (GitHub Actions) | — | ❌ | — | — |
-| Demo (assertion-driven) | ✅ | ✅ | ✅ | — |
-| CLI (reality-engine) | — | ❌ | — | — |
-| Frontend | — | ❌ | — | ✅ stub |
-
-## Defect Status (from AUDIT.md, commit bfb2d60)
-
-| ID | Defect | Status |
-|----|--------|--------|
-| D1 | Install fails | ✅ Fixed |
-| D2 | All runtime deps unused | ✅ Fixed |
-| D3 | _uid() collisions | ✅ Fixed |
-| D4 | As-of reconstruction broken | ✅ Fixed |
-| D5 | Content not preserved | ✅ Fixed |
-| D6 | Engine ignores validator | ✅ Fixed |
-| D7 | Audit chain not chained | ✅ Fixed |
-| D8 | from * import raises | ✅ Fixed |
-| D9 | Valid time conflated | ✅ Fixed |
-| D10 | Entity resolution silently wrong | ✅ Fixed |
-| D11 | Transactions and WAL claimed, not real | ✅ Fixed |
-| D12 | Demo lies | ✅ Fixed |
+| ID | state | test | commit |
+|---|---|---|---|
+| F-01 | open | - | - |
+| F-02 | open | - | - |
+| F-03 | open | - | - |
+| F-04 | open | - | - |
+| F-05 | open | - | - |
+| F-06 | open | - | - |
+| F-07 | open | - | - |
+| F-08 | open | - | - |
+| F-09 | open | - | - |
+| F-10 | open | - | - |
+| F-11 | open | - | - |
+| F-12 | open | - | - |
+| F-13 | open | - | - |
+| F-14 | open | - | - |
+| F-15 | open | - | - |
+| F-16 | open | - | - |
+| F-17 | open | - | - |
+| F-18 | open | - | - |
+| F-19 | open | - | - |
+| F-20 | open | - | - |
+| F-19a | open | - | - |
+| F-19b | open | - | - |
+| F-19c | open | - | - |
+| F-19d | open | - | - |
+| F-19e | open | - | - |
+| F-19f | open | - | - |
+| F-19g | open | - | - |
 
 ## Milestones
 
-| Milestone | Status | Notes |
-|-----------|--------|-------|
-| M0 (Architecture) | ✅ Complete | 112 docs, 16 schemas |
-| M1 (Finish properly) | 🔄 In progress | Defect tests + CI |
-| M2 (Bitemporal) | ✅ M2 partial | temporal.py, claims_versions |
-| M3 (Revision engine) | ⚠️ Stub | Approvals not yet in code |
-
-## Next Steps
-
-1. CI (GitHub Actions)
-2. Demo integration test
-3. CLI (reality-engine)
-4. M2 (bitemporal)
-5. M3 (revision engine)
+- M0: complete
+- M1: open
+- M2: open
+- M3: open
