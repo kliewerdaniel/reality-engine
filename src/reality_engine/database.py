@@ -330,6 +330,16 @@ class Database:
         self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA busy_timeout = 5000")
         self.conn.executescript(SCHEMA)
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            )
+        """)
+        cur = self.conn.execute("PRAGMA user_version").fetchone()[0]
+        if cur < 1:
+            self.conn.execute("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?)", (self._now(),))
+            self.conn.execute("PRAGMA user_version = 1")
         self.conn.commit()
         self.conn.row_factory = sqlite3.Row
 

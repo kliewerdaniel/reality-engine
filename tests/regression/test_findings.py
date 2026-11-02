@@ -212,7 +212,6 @@ def test_f01_timestamp_canonical():
     assert len(snap["observations"]) == 0
 
 
-@pytest.mark.xfail(strict=True, reason="F-02")
 def test_f02_schema_versioning():
     import tempfile, pathlib
     from reality_engine.database import Database
