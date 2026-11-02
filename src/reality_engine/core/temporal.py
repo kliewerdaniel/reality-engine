@@ -137,18 +137,22 @@ def reconstruct_claims_at(
     """
     if entity_id:
         query = (
-            "SELECT * FROM claims"
-            " WHERE subject_id = ? AND recorded_at <= ?"
-            " ORDER BY recorded_at"
+            "SELECT cv.* FROM claim_versions cv "
+            "WHERE cv.subject_id = ? AND cv.recorded_at <= ? "
+            "AND cv.recorded_at = (SELECT MAX(cv2.recorded_at) FROM claim_versions cv2 "
+            "WHERE cv2.claim_id = cv.claim_id AND cv2.recorded_at <= ?) "
+            "ORDER BY cv.recorded_at"
         )
-        params = (entity_id, timestamp)
+        params = (entity_id, timestamp, timestamp)
     else:
         query = (
-            "SELECT * FROM claims"
-            " WHERE recorded_at <= ?"
-            " ORDER BY recorded_at"
+            "SELECT cv.* FROM claim_versions cv "
+            "WHERE cv.recorded_at <= ? "
+            "AND cv.recorded_at = (SELECT MAX(cv2.recorded_at) FROM claim_versions cv2 "
+            "WHERE cv2.claim_id = cv.claim_id AND cv2.recorded_at <= ?) "
+            "ORDER BY cv.recorded_at"
         )
-        params = (timestamp,)
+        params = (timestamp, timestamp)
     rows = conn.execute(query, params).fetchall()
     return [dict(r) for r in rows]
 

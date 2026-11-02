@@ -134,7 +134,6 @@ def test_f09_no_delete_entity():
     from reality_engine.database import Database
     assert not hasattr(Database, "delete_entity")
 
-@pytest.mark.xfail(strict=True, reason="F-13")
 def test_f13_validator_fail_closed():
     import tempfile, pathlib
     from reality_engine.database import Database
@@ -150,7 +149,10 @@ def test_f13_validator_fail_closed():
     eng = RevisionEngine(db)
     obs2 = db.register_observation(doc, src, ent, "challenge", "2026-10-06T00:00:00Z")
     # fabricated quote span
-    fake_span = db.extract_source_span(doc, "FABRICATED QUOTE NOT IN DOC", 1, 0, 27)
+    fake_span = "span_fake"
+    db.conn.execute("INSERT INTO source_spans (id, document_id, start_offset, end_offset, page, quoted_text, created_at) VALUES (?,?,?,?,?,?,?)",
+                    (fake_span, doc, 0, 27, 1, "FABRICATED QUOTE NOT IN DOC", db._now()))
+    db.conn.commit()
     db.add_evidence_link(clm, fake_span, "SUPPORTS", "SUPPORTED")
     proposal = {"proposal_id":"revp_x","affected_records":[clm],"entity_id":ent,
                 "trigger_observation_id":obs2,"challenge_evidence_id":span,
@@ -209,7 +211,6 @@ def test_f02_schema_versioning():
     assert v >= 1
 
 
-@pytest.mark.xfail(strict=True, reason="F-16")
 def test_f16_demo_asserts():
     src = open("demo/evidence_foundation_demo.py").read()
     assert "from reality_engine.revision import" in src or "import reality_engine.revision" in src
