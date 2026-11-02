@@ -174,10 +174,16 @@ def reconstruct_events_at(
 
 # ── Bitemporal state materialization ────────────────────────────────────────────
 
+def _canon_ts(ts):
+    from reality_engine.core.clock import canonical_utc
+    dt = parse_iso8601(ts)
+    return canonical_utc(dt) if dt is not None else ts
+
 def materialize_world_state_at(
     conn: sqlite3.Connection,
     timestamp: str
 ) -> dict:
+    timestamp = _canon_ts(timestamp)
     """Materialize a snapshot of the world state at a given transaction time.
 
     Returns a dictionary with:

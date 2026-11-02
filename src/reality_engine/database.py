@@ -518,6 +518,11 @@ class Database:
     def register_observation(self, document_id: str, source_id: str,
                              subject_id: str, observed_value: str,
                              recorded_at: str, observation_type: str = "REPORT") -> str:
+        from reality_engine.core.temporal import parse_iso8601
+        from reality_engine.core.clock import canonical_utc
+        dt = parse_iso8601(recorded_at)
+        if dt is not None:
+            recorded_at = canonical_utc(dt)
         obs_id = _uid("obs")
         self.conn.execute(
             "INSERT INTO observations (id, observation_type, subject_id, observed_value, recorded_at,"
