@@ -306,14 +306,18 @@ class _Transaction:
         self._closed = False
 
     def __enter__(self) -> "_Transaction":
-        self.conn.execute("BEGIN")
+        self.conn._in_tx = True
+        self.conn.execute("BEGIN IMMEDIATE")
         return self
 
-    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_val: Any, exc_tb: Any) -> Literal[False]:
-        if exc_type is not None:
-            self.conn.rollback()
-        else:
-            self.conn.commit()
+    def __exit__(self, exc_type, exc_val, exc_tb) -> Literal[False]:
+        try:
+            if exc_type is not None:
+                self.conn.rollback()
+            else:
+                self.conn.commit()
+        finally:
+            self.conn._in_tx = False
         return False
 
 
@@ -326,6 +330,7 @@ class Database:
         self.path = path
         self.clock = clock
         self.conn = self._connect(path)
+        self.conn.isolation_level = None
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA busy_timeout = 5000")
@@ -340,7 +345,8 @@ class Database:
         if cur < 1:
             self.conn.execute("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?)", (self._now(),))
             self.conn.execute("PRAGMA user_version = 1")
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         self.conn.row_factory = sqlite3.Row
 
     def _connect(self, path: Path) -> sqlite3.Connection:
@@ -375,7 +381,8 @@ class Database:
             " VALUES (?, ?, ?, ?, ?)",
             (dom_id, name, name.lower(), description, self._now()),
         )
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         return dom_id
 
     # ── Sources ────────────────────────────────────────────────────────────────
@@ -387,7 +394,8 @@ class Database:
             " VALUES (?, ?, ?, ?, ?, ?)",
             (src_id, name, source_type, canonical_domain, self._now(), self._now()),
         )
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         return src_id
 
     # ── Documents ───────────────────────────────────────────────────────────────
@@ -413,7 +421,8 @@ class Database:
              content_hash, content_type, content, language, published_at,
              collected_at, processing_status, self._now(), self._now()),
         )
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         return doc_id
 
     # ── Source Spans ───────────────────────────────────────────────────────────
@@ -434,7 +443,8 @@ class Database:
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
             (span_id, document_id, start_offset, end_offset, page, quoted_text, self._now()),
         )
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         return span_id
 
     # ── Entities ───────────────────────────────────────────────────────────────
@@ -467,7 +477,8 @@ class Database:
                     " VALUES (?, ?, ?, ?, ?, ?)",
                     (ali_id, ent_id, alias, alias, normalized, self._now()),
                 )
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         return ent_id
 
     def resolve_entity(self, name: str, limit: int = 3) -> list[dict[str, Any]]:
@@ -548,7 +559,8 @@ class Database:
             (obs_id, observation_type, subject_id, observed_value, recorded_at,
              source_id, document_id, recorded_at, recorded_at),
         )
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         return obs_id
 
     def get_observations_for_entity(self, entity_id: str) -> list[dict[str, Any]]:
@@ -602,7 +614,8 @@ class Database:
             (evt_id, event_type, event_description, occurred_at, occurred_on,
              recorded_at, source_id, document_id, observation_ids, recorded_at),
         )
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         return evt_id
 
     def get_events(self, event_type: Optional[str] = None, start_date: Optional[str] = None,
@@ -661,7 +674,8 @@ class Database:
             (rel_id, relationship_type, subject_id, object_id, predicate,
              valid_from, valid_to, recorded_at, source_id, document_id, recorded_at),
         )
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         return rel_id
 
     def get_relationships_for_entity(self, entity_id: str, direction: str = "outgoing") -> list[dict[str, Any]]:
@@ -731,7 +745,8 @@ class Database:
             " VALUES (?, ?, ?, 'DERIVED_FROM', 'SUPPORTED', ?)",
             (evl_id, claim_id, source_span_id, recorded_at),
         )
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         return claim_id
 
     def get_claim_by_id(self, claim_id: str) -> dict:
@@ -801,7 +816,8 @@ class Database:
             " VALUES (?, ?, ?, ?, ?, ?)",
             (evl_id, claim_id, source_span_id, relationship_type, assessment_status, self._now()),
         )
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
         return evl_id
 
     def delete_entity(self, entity_id: str) -> None:
@@ -815,7 +831,8 @@ class Database:
                           (entity_id, entity_id))
         self.conn.execute("DELETE FROM observations WHERE subject_id = ?", (entity_id,))
         self.conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
-        self.conn.commit()
+        if not getattr(self.conn, "_in_tx", False):
+            self.conn.commit()
 
     def close(self):
         self.conn.close()
