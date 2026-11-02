@@ -121,7 +121,6 @@ def test_f06_documents_immutable():
     except sqlite3.Error:
         pass
 
-@pytest.mark.xfail(strict=True, reason="F-07")
 def test_f07_valid_from_null():
     import tempfile, pathlib
     from reality_engine.database import Database

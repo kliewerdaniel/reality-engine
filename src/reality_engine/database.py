@@ -683,7 +683,8 @@ class Database:
     def submit_claim(self, subject_id: str, predicate: str, object_value: str,
                      claim_type: str, domain_id: str, document_id: str,
                      source_span_id: str, status: str = "SUPPORTED",
-                     recorded_at: Optional[str] = None) -> str:
+                     recorded_at: Optional[str] = None,
+                     valid_from: Optional[str] = None) -> str:
         """Submit a new claim version and link it to its source span.
 
         Args:
@@ -708,7 +709,7 @@ class Database:
             " document_id, valid_from, recorded_at, status, revision_number, created_at, updated_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
             (claim_id, subject_id, predicate, object_value, claim_type, domain_id,
-             document_id, recorded_at, recorded_at, status, recorded_at, recorded_at),
+             document_id, valid_from, recorded_at, status, recorded_at, recorded_at),
         )
         # Insert a claim version (no time conflation: valid_to stays NULL)
         # Version ID is distinct from claim ID
@@ -718,8 +719,11 @@ class Database:
             " claim_type, domain_id, document_id, valid_from, valid_to, recorded_at, status, revision_number, created_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
             (result_version_id, claim_id, subject_id, predicate, object_value, claim_type, domain_id,
-             document_id, recorded_at, None, recorded_at, status, recorded_at),
+             document_id, valid_from, None, recorded_at, status, recorded_at),
         )
+        span_row = self.conn.execute("SELECT document_id FROM source_spans WHERE id=?", (source_span_id,)).fetchone()
+        if span_row is None or (span_row["document_id"] if hasattr(span_row, "keys") else span_row[0]) != document_id:
+            raise ValueError("span document mismatch")
         # Link the claim to the source passage
         evl_id = _uid("evl")
         self.conn.execute(
