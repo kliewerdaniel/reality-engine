@@ -60,7 +60,7 @@ The system must detect cyclic dependencies. If a cycle is found, the system must
 | Conflict Type | Resolution |
 |---|---|
 | Temporal | Use bitemporal records to determine the correct valid time |
-| Provenance | Use the most authoritative source |
+| Provenance | Resolve by evaluating domain- and claim-specific authority dimensions; do not use a single universal authority score |
 | Evidence | Evaluate remaining evidence independently |
 | Dependency | Flag for reassessment without automatic reversal |
 

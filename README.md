@@ -9,6 +9,34 @@
 
 ---
 
+## 0. First End-to-End Proof
+
+The defining capability of Reality Engine is not a dashboard or a multi-agent system. It is the ability to **change its understanding of the world without losing the history of how it got there**.
+
+The first executable proof is in the `demo/` directory:
+
+**`demo/evidence_foundation_demo.py`**
+
+This script executes the full eight-step workflow defined in the acceptance criteria:
+
+1. Register a source and ingest an original document.
+2. Preserve its content, hash, collection time, and provenance.
+3. Extract a claim and link it to an exact passage in the document.
+4. Ingest a second document that challenges the claim.
+5. Generate a revision proposal without changing accepted state.
+6. Validate the proposal through deterministic rules.
+7. Commit the accepted revision while preserving the previous state.
+8. Query both what the system believed before and what it believes now.
+
+```bash
+cd /Users/danielkliewer/Projects/reality-engine
+python demo/evidence_foundation_demo.py
+```
+
+The script creates an in-memory SQLite database at `demo/demo_evidence_foundation.db` and prints each step with its results. A successful run ends with the claim status transitioning from `SUPPORTED` to `CONTESTED`, the previous state hash preserved in the `revisions` table, and both the before/after world states queryable.
+
+---
+
 ## 1. Project Definition
 
 Reality Engine is a continuously operating computational system designed to construct, maintain, evaluate, and revise a global representation of the world using observations collected from heterogeneous information sources.

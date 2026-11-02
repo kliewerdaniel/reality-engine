@@ -89,9 +89,11 @@ Source quality validation checks:
 | Source reliability | The source is reliable for this type of information |
 | Directness | The evidence is direct or secondhand |
 | Measurement quality | The underlying measurement is reliable |
-| Corroboration | Independent sources corroborate |
+| Corroboration | Independent sources corroborate (genuinely independent) |
+| Domain-specific authority | Authority is evaluated per domain and per claim type |
+| Independence | Shared origin is detected and flagged |
 
-**Constraint:** Do not collapse evidence quality into one universal reliability score.
+**Constraint:** Authority is domain- and claim-specific, not a universal tie-breaker. "Most authoritative" must be evaluated as a vector of dimensions (see EVIDENCE_ASSESSMENT.md).
 
 ---
 

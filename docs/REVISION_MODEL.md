@@ -1,7 +1,7 @@
 # Revision Model
 
 **Reality Engine — Revision Model Document**
-**Version:** 0.1.0
+**Version:** 0.1.1
 **Date:** November 1, 2026
 
 This document defines the formal revision model of Reality Engine. It defines the state categories, revision operations, dependency semantics, and the revision transaction.
@@ -23,33 +23,84 @@ The revision engine manages the following state categories:
 
 ---
 
-## 2. Revision Operations
+## 2. Claim Identity vs. Versioning vs. Assessment
 
-### 2.1 Primary Operations
+A claim is an enduring assertion about the world. It must not disappear when new evidence arrives. Instead, the system administers a claim's lifecycle through distinct mechanisms:
 
-| Operation | Meaning |
+### 2.1 Claim Identity
+
+A claim is identified by its `id`. The claim persists across revisions. Its identity, subject, predicate, and object description remain stable.
+
+- The claim "Inflation is increasing" has one identity even if the system's assessment changes.
+- Retraction is not removal; the claim remains in the model with a new status.
+
+### 2.2 Claim Versions
+
+A claim may have successive versions that represent changes in formulation, temporal scope, or supporting evidence.
+
+- A claim's `object_value` may change over time, with each change creating a new version.
+- The current version is the one the system would present as its current understanding.
+- Historical versions are preserved in `revision_events` and `world_states`.
+
+### 2.3 Evidence Assessments
+
+Each piece of evidence is assessed separately against the claim via evidence links.
+
+- SUPPORTS, CONTRADICTS, QUALIFIES, CORROBORATES relationships are attached to specific observations.
+- The assessment status of each evidence link is independent and versioned.
+- The claim's overall status is the aggregation of its evidence links.
+
+### 2.4 Current Epistemic Status
+
+The claim's current assessment reflects the system's latest understanding, given all available evidence:
+
+| Status | Meaning |
 |---|---|
-| **CREATE** | Create a new entity, claim, or hypothesis. |
-| **SUPPORT** | Add supporting evidence to an existing claim. |
-| **QUALIFY** | Add qualifying conditions to an existing claim. |
-| **CHALLENGE** | Add contradictory evidence to an existing claim. |
-| **RETRACT** | Remove a claim. |
-| **REPLACE** | Swap a claim for a corrected claim. |
-| **SUPERSEDE** | Mark an older version as replaced. |
-| **CORRECT_TEMPORAL_SCOPE** | Fix the valid time range. |
-| **REASSIGN_ENTITY** | Change the subject entity. |
-| **INVALIDATE_DEPENDENCY** | Remove a dependency edge. |
-| **REASSESS_HYPOTHESIS** | Recalculate the hypothesis status. |
+| UNASSESSED | No assessment yet |
+| SUPPORTED | Evidence predominantly supports |
+| PARTIALLY_SUPPORTED | Mix of support and challenge |
+| CONTESTED | Competing evidence exists |
+| CONTRADICTED | Evidence predominantly contradicts |
+| UNSUPPORTED | Insufficient evidence; not the same as contradicted |
+| WITHDRAWN | Source has withdrawn the claim |
+| SUPERSEDED | Replaced by a newer claim version |
 
-**Constraint:** Additional operations may be necessary. The revision state machine must support any operation that is needed.
+### 2.5 Historical Assessment
+
+A claim's historical assessment is what the system believed at a specific knowledge time, given only information available at that time. This is distinct from the current assessment.
+
+- Historical querying must use `recorded_at` ≤ the requested knowledge time.
+- Historical assessments are reconstructed from the audit trail.
 
 ---
 
-## 3. Dependency Semantics
+## 3. Revision Operations
+
+The revision engine supports the following operations. None of these removes a claim from the model; they all preserve the claim's identity and record the change explicitly.
+
+| Operation | Meaning |
+|---|---|
+| **CREATE** | Create a new entity, claim, or hypothesis. The claim acquires a new identity. |
+| **SUPPORT** | Add supporting evidence to an existing claim. |
+| **QUALIFY** | Add qualifying conditions to an existing claim. |
+| **CHALLENGE** | Add contradictory evidence to an existing claim. |
+| **RETRACT** | Change a claim's status to WITHDRAWN, preserving the claim record and its history. The claim no longer reflects current understanding but is not removed. |
+| **REPLACE** | Create a new claim version that supersedes the old one. The old version is marked SUPERSEDED. |
+| **SUPERSEDE** | Mark an older claim version as replaced. Both versions remain. |
+| **CORRECT_TEMPORAL_SCOPE** | Fix or refine the valid time range of a claim. The claim record is preserved with a new version. |
+| **REASSIGN_ENTITY** | Change the subject entity of a claim. The claim record and its history are preserved. |
+| **INVALIDATE_DEPENDENCY** | Remove a dependency edge. The dependency is marked INVALID. |
+| **REASSESS_HYPOTHESIS** | Recalculate the hypothesis status. |
+
+**Constraint:** Any operation that would remove a claim must instead change the claim's status to a lifecycle state (WITHDRAWN, SUPERSEDED, or REJECTED) and preserve the claim record, its evidence links, and its history.
+
+---
+
+## 4. Dependency Semantics
 
 The revision engine maintains explicit dependencies between conclusions.
 
-### 3.1 Dependency Types
+### 4.1 Dependency Types
 
 | Type | Meaning |
 |---|---|
@@ -61,7 +112,7 @@ The revision engine maintains explicit dependencies between conclusions.
 | INVALID | The dependency is invalid. |
 | CROSS_DOMAIN | The dependency spans domains. |
 
-### 3.2 Dependency Traversal
+### 4.2 Dependency Traversal
 
 | Step | Action |
 |---|---|
@@ -76,7 +127,7 @@ The revision engine maintains explicit dependencies between conclusions.
 
 ---
 
-## 4. Revision Transaction
+## 5. Revision Transaction
 
 A revision transaction must:
 
@@ -95,7 +146,9 @@ A revision transaction must:
 
 ---
 
-## 5. Revision Invariants
+## 6. Revision Invariants
+
+The revision engine enforces the following invariants:
 
 | Invariant | Description |
 |---|---|
@@ -111,7 +164,7 @@ A revision transaction must:
 
 ---
 
-## 6. Revision Outcomes
+## 7. Revision Outcomes
 
 | Outcome | Meaning |
 |---|---|
@@ -121,13 +174,13 @@ A revision transaction must:
 | CHALLENGED | Existing claim is challenged |
 | CONTRADICTED | Existing claim is contradicted |
 | SUPERSEDED | Replaced by a newer version |
-| WITHDRAWN | Explicitly withdrawn |
+| WITHDRAWN | Explicitly withdrawn; claim record preserved |
 | UNRESOLVED | Cannot be resolved |
 | NO_CHANGE | No effect on current understanding |
 
 ---
 
-## 7. Revision States
+## 8. Revision States
 
 | State | Meaning |
 |---|---|
@@ -141,7 +194,7 @@ A revision transaction must:
 
 ---
 
-## 8. Revision Pseudocode
+## 9. Revision Pseudocode
 
 ```python
 def process_revision(observation):
@@ -162,34 +215,38 @@ def process_revision(observation):
 
 ---
 
-## 9. Revision Examples
+## 10. Revision Examples
 
-### 8.1 New Information
+### 10.1 New Information
 
 A new observation arrives. The revision engine identifies affected claims and generates a proposal.
 
-### 8.2 Correction
+### 10.2 Correction
 
 A correction to the temporal scope of a claim is recorded as a new event. The original record is preserved.
 
-### 8.3 Hypothesis Invalidation
+### 10.3 Claim Retraction
+
+A source withdraws a claim. The system changes the claim's status to WITHDRAWN. The claim record, its evidence links, and its history are preserved. The claim is no longer part of the current understanding.
+
+### 10.4 Hypothesis Invalidation
 
 A new observation invalidates a hypothesis. The system flags downstream hypotheses for reassessment.
 
 ---
 
-## 10. Summary
+## 11. Summary
 
-- The revision engine manages six state categories.
+- The revision engine manages seven state categories.
 - It supports eleven primary revision operations.
 - It maintains explicit dependencies between conclusions.
-- It enforces five revision invariants.
+- It enforces seven revision invariants.
 - It manages nine revision outcomes.
 - It supports seven revision states.
 
 ---
 
-## 11. References
+## 12. References
 
 - ONTOLOGY.md — common ontology definitions
 - TEMPORAL_MODEL.md — bitemporal semantics

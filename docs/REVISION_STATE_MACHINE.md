@@ -1,7 +1,7 @@
 # Revision State Machine
 
 **Reality Engine — Revision State Machine Document**
-**Version:** 0.1.0
+**Version:** 0.1.1
 **Date:** November 1, 2026
 
 This document defines the revision state machine, including revision triggers, revision proposals, revision operations, revision states, dependency traversal, conflict resolution, temporal consistency, validation, commit semantics, rollback and correction behavior, and audit requirements.
@@ -21,6 +21,8 @@ stateDiagram
     ROLLING_BACK --> ROLLED_BACK
     ROLLED_BACK --> VALIDATED
     VALIDATED --> ROLLING_BACK
+    REJECTED --> PROPOSED
+    COMMITTED --> PROPOSED
 ```
 
 | State | Meaning |
@@ -32,7 +34,6 @@ stateDiagram
 | ROLLING_BACK | The revision is being rolled back. |
 | ROLLED_BACK | The revision has been rolled back. |
 | REJECTED | The proposal has been rejected. |
-| AWAITING_REVIEW | Awaiting review. |
 
 ---
 
@@ -83,8 +84,8 @@ A revision proposal is a structured proposal to change the world model. It inclu
 | SUPPORT | Add supporting evidence |
 | QUALIFY | Add qualifying conditions |
 | CHALLENGE | Add contradictory evidence |
-| RETRACT | Remove a claim |
-| REPLACE | Swap a claim for a corrected one |
+| RETRACT | Change a claim's assessment to WITHDRAWN; preserve claim record and history |
+| REPLACE | Swap a claim for a corrected version |
 | SUPERSEDE | Mark an older version as replaced |
 | CORRECT_TEMPORAL_SCOPE | Fix the valid time range |
 | REASSIGN_ENTITY | Change the subject entity |
@@ -113,7 +114,7 @@ A revision proposal is a structured proposal to change the world model. It inclu
 | Conflict Type | Resolution |
 |---|---|
 | Temporal | Use bitemporal records to determine the correct valid time. |
-| Provenance | Use the most authoritative source. |
+| Provenance | Resolve by evaluating the specific authority dimensions for the claim domain; do not use a single universal authority score. |
 | Evidence | Evaluate remaining evidence independently. |
 | Dependency | Flag for reassessment without automatic reversal. |
 
@@ -193,7 +194,7 @@ All significant state transitions must produce audit events:
 
 ## 12. Summary
 
-- The revision state machine has seven states.
+- The revision state machine has eight states.
 - Revisions can be triggered by nine events.
 - Revisions can be proposed, validated, committed, or rejected.
 - Dependency traversal is explicit and deterministic.

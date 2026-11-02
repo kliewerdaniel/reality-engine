@@ -1,21 +1,33 @@
 # Architecture Decision Records
 
 **Reality Engine — Architecture Decision Records (ADRs)**
-**Version:** 0.1.0
+**Version:** 0.1.1
 **Date:** November 1, 2026
 
-This document records the key architecture decisions for Reality Engine. Each decision record contains:
+This document records the key architecture decisions for Reality Engine. Each decision record contains context, decision, rationale, and consequences.
 
-- Context: the decision that needed to be made.
-- Decision: the decision that was made.
-- Rationale: why this decision was made.
-- Consequences: the resulting changes.
+---
+
+## Decision Classification
+
+Each ADR carries a classification that indicates its maturity and evidentiary basis:
+
+| Classification | Meaning |
+|---|---|
+| **Established** | Required by the project's fundamental principles. Not materially disputable. |
+| **Provisional** | Selected as the initial engineering approach. Sensible and reasoned, but must be demonstrated through implementation. |
+| **Experimental** | Needs a prototype and evaluation. The approach may not be adopted. |
+| **Deferred** | Intentionally outside the current milestone. Implemented later or not at all. |
+
+**Constraint:** Do not treat a provisional decision as a settled engineering necessity. Mark provisional decisions as such in all dependent documentation.
 
 ---
 
 ## ADR-001: The Fundamental Object
 
-**Status:** DECIDED
+**Status:** Established
+
+**Classification:** Required by project fundamental principles. The fundamental object is fixed by the project's definition.
 
 **Context:** The system needed a fundamental object to represent the world. Options included: a document, a conversation, an embedding, or a claim about reality supported by evidence, situated in time, and connected to other claims.
 
@@ -34,7 +46,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-002: Five Core Object Types
 
-**Status:** DECIDED
+**Status:** Established
+
+**Classification:** Required by project fundamental principles. Five distinct object types are the core ontology.
 
 **Context:** The system needed to represent different kinds of information. Options included a single generic knowledge object, or distinct objects.
 
@@ -58,7 +72,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-003: The Seven-Layer Architecture
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Initial organizational choice. Must be demonstrated through implementation.
 
 **Context:** The system needed an organizational structure for its components.
 
@@ -86,7 +102,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-004: Modular Monolith
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Initial engineering approach. Microservices deferred until measured requirements justify them.
 
 **Context:** The system required an initial implementation architecture.
 
@@ -104,7 +122,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-005: SQLite WAL
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Sensible initial choice. Prototype evidence needed before broader adoption.
 
 **Context:** The system needed a primary database.
 
@@ -122,7 +142,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-006: Bitemporal Data Model
 
-**Status:** DECIDED
+**Status:** Established
+
+**Classification:** Required by the temporal model. Bitemporal fields are fundamental to the system.
 
 **Context:** The system needed to model time correctly.
 
@@ -147,7 +169,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-007: Evidence-Centric Revision Engine
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Central subsystem. Must be demonstrated through the evidence foundation.
 
 **Context:** The system needed a way to revise its understanding.
 
@@ -172,7 +196,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-008: Six Specialized Agents
 
-**Status:** DECIDED
+**Status:** Experimental
+
+**Classification:** Needs prototype and evaluation. The six-agent architecture is not yet proven.
 
 **Context:** The system needed intelligence agents.
 
@@ -200,7 +226,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-009: Evidence Preservation
 
-**Status:** DECIDED
+**Status:** Established
+
+**Classification:** Required by the evidence-preservation principle.
 
 **Context:** The system needed to preserve evidence.
 
@@ -219,7 +247,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-010: Source Independence Tracking
 
-**Status:** DECIDED
+**Status:** Established
+
+**Classification:** Required by the source-independence principle. Distinguishes publication diversity from evidentiary independence.
 
 **Context:** The system needed to measure the independence of sources.
 
@@ -237,7 +267,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-011: Multidimensional Epistemic Model
 
-**Status:** DECIDED
+**Status:** Established
+
+**Classification:** Required by the dimensional uncertainty principle. No universal confidence score.
 
 **Context:** The system needed to represent uncertainty.
 
@@ -264,7 +296,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-012: Local-First Technology Stack
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Initial technology stack. Local-first by default; cloud deferred.
 
 **Context:** The system needed a technology stack.
 
@@ -297,7 +331,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-013: No LLM as World Model
 
-**Status:** DECIDED
+**Status:** Established
+
+**Classification:** Required by the deterministic governance principle. LLMs propose; deterministic systems control.
 
 **Context:** The system needed a clear boundary between the world model and model-generated proposals.
 
@@ -316,7 +352,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-014: Domain-Specific World Models
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Initial architectural choice. Domains should be demonstrated through implementation.
 
 **Context:** The system needed a model of the world.
 
@@ -334,7 +372,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-015: Task-Driven Agent Execution
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Initial execution approach. Task scheduling must be demonstrated.
 
 **Context:** The system needed to execute intelligence agents.
 
@@ -352,7 +392,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-016: Event Sourcing and Append-Only Audit
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Initial audit approach. Event sourcing is the chosen implementation pattern.
 
 **Context:** The system needed audit and history.
 
@@ -371,7 +413,9 @@ This document records the key architecture decisions for Reality Engine. Each de
 
 ## ADR-017: Deeply Layered Time
 
-**Status:** DECIDED
+**Status:** Established
+
+**Classification:** Required by the temporal model. Historical reconstruction requires multiple time dimensions.
 
 **Context:** The system needed to distinguish when something happened from when it became known.
 
@@ -394,6 +438,8 @@ These are different questions.
 ## ADR-018: Active World Observation
 
 **Status:** DEFERRED
+
+**Classification:** Deferred. Intentionally outside current milestone.
 
 **Context:** The system should identify gaps in its understanding and determine which additional observations would most improve its understanding.
 
@@ -422,7 +468,9 @@ The system should eventually measure whether acquiring the suggested information
 
 ## ADR-019: Initial Source Set
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Initial source set. Must be validated through the collection pipeline.
 
 **Context:** The system needed initial sources.
 
@@ -449,7 +497,9 @@ The system should eventually measure whether acquiring the suggested information
 
 ## ADR-020: Benchmarks Before Implementation
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Benchmarks guide implementation. Validation is a work in progress.
 
 **Context:** The system needed a way to measure success.
 
@@ -471,7 +521,9 @@ The system should eventually measure whether acquiring the suggested information
 
 ## ADR-021: Observability Model
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Initial observability model. Should be demonstrated through system operation.
 
 **Context:** The system needed to represent the limitations of its own information environment.
 
@@ -489,7 +541,9 @@ The system should eventually measure whether acquiring the suggested information
 
 ## ADR-022: Modular Deployment
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Initial deployment pattern. Microservices deferred until measured requirements justify them.
 
 **Context:** The system needed a deployment strategy.
 
@@ -507,7 +561,9 @@ The system should eventually measure whether acquiring the suggested information
 
 ## ADR-023: Model Abstraction Layer
 
-**Status:** DECIDED
+**Status:** Established
+
+**Classification:** Required by the model-independence principle. Models are pluggable, not hardcoded.
 
 **Context:** The system needed to integrate models.
 
@@ -525,7 +581,9 @@ The system should eventually measure whether acquiring the suggested information
 
 ## ADR-024: Versioned Ontology
 
-**Status:** PROPOSED
+**Status:** DEFERRED
+
+**Classification:** Deferred. Versioned ontology evolution intentionally outside current milestone.
 
 **Context:** The system needed to evolve the ontology.
 
@@ -543,7 +601,9 @@ The system should eventually measure whether acquiring the suggested information
 
 ## ADR-025: No Universal Confidence Score
 
-**Status:** DECIDED
+**Status:** Established
+
+**Classification:** Required by the dimensional uncertainty principle. No universal score.
 
 **Context:** The system needed to represent uncertainty.
 
@@ -560,7 +620,9 @@ The system should eventually measure whether acquiring the suggested information
 
 ## ADR-026: Initial Implementation
 
-**Status:** DECIDED
+**Status:** Provisional
+
+**Classification:** Implementation sequence. The first proof is the evidence foundation, not orchestration.
 
 **Context:** The system needed an initial implementation plan.
 
@@ -590,6 +652,8 @@ The system should eventually measure whether acquiring the suggested information
 ## ADR-027: Deferred Distributed Execution
 
 **Status:** DEFERRED
+
+**Classification:** Deferred. Distributed execution intentionally outside current milestone. Embedded task processing only.
 
 **Context:** The system needed to decide when to introduce distributed execution.
 
