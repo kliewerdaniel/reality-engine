@@ -285,8 +285,61 @@ CREATE INDEX IF NOT EXISTS idx_observations_valid_time ON observations(valid_fro
 -- Bitemporal index: relationships valid_from/valid_to
 CREATE INDEX IF NOT EXISTS idx_relationships_valid_time ON relationships(valid_from, valid_to);
 
+
 -- Bitemporal index: events occurred_at
 CREATE INDEX IF NOT EXISTS idx_events_occurred_at ON events(occurred_at);
+
+-- Append-only enforcement (F-06)
+CREATE TRIGGER IF NOT EXISTS trg_documents_no_update
+BEFORE UPDATE ON documents
+BEGIN
+    SELECT RAISE(ABORT, 'documents immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_documents_no_delete
+BEFORE DELETE ON documents
+BEGIN
+    SELECT RAISE(ABORT, 'documents immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_source_spans_no_update
+BEFORE UPDATE ON source_spans
+BEGIN
+    SELECT RAISE(ABORT, 'source_spans immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_source_spans_no_delete
+BEFORE DELETE ON source_spans
+BEGIN
+    SELECT RAISE(ABORT, 'source_spans immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_claim_versions_no_update
+BEFORE UPDATE ON claim_versions
+BEGIN
+    SELECT RAISE(ABORT, 'claim_versions immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_claim_versions_no_delete
+BEFORE DELETE ON claim_versions
+BEGIN
+    SELECT RAISE(ABORT, 'claim_versions immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_revisions_no_update
+BEFORE UPDATE ON revisions
+BEGIN
+    SELECT RAISE(ABORT, 'revisions immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_revisions_no_delete
+BEFORE DELETE ON revisions
+BEGIN
+    SELECT RAISE(ABORT, 'revisions immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_audit_events_no_update
+BEFORE UPDATE ON audit_events
+BEGIN
+    SELECT RAISE(ABORT, 'audit_events immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_audit_events_no_delete
+BEFORE DELETE ON audit_events
+BEGIN
+    SELECT RAISE(ABORT, 'audit_events immutable');
+END;
 """
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────

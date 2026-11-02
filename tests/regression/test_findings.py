@@ -20,7 +20,6 @@ def test_f04_deduplication():
     d2 = db.ingest_document(src, "same", "article", "en", "2026-10-01T00:00:00Z")
     assert d1 == d2
 
-@pytest.mark.xfail(strict=True, reason="F-08")
 def test_f08_transaction_rollback():
     import tempfile, pathlib
     from reality_engine.database import Database
@@ -105,7 +104,6 @@ def test_f05_span_validation():
         return  # would be correct behavior
     assert False, "accepted invalid span (defect)"
 
-@pytest.mark.xfail(strict=True, reason="F-06")
 def test_f06_documents_immutable():
     import tempfile, pathlib, sqlite3
     from reality_engine.database import Database
@@ -135,7 +133,6 @@ def test_f07_valid_from_null():
     c = db.get_claim_by_id(clm)
     assert c["valid_from"] is None
 
-@pytest.mark.xfail(strict=True, reason="F-09")
 def test_f09_no_delete_entity():
     from reality_engine.database import Database
     assert not hasattr(Database, "delete_entity")
