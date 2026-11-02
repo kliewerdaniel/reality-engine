@@ -420,6 +420,14 @@ class Database:
 
     def extract_source_span(self, document_id: str, quoted_text: str,
                              page: int, start_offset: int, end_offset: int) -> str:
+        row = self.conn.execute("SELECT content FROM documents WHERE id=?", (document_id,)).fetchone()
+        if row is None:
+            raise ValueError("unknown document")
+        content = row["content"] if hasattr(row, "keys") else row[0]
+        if start_offset < 0 or end_offset < start_offset or end_offset > len(content):
+            raise ValueError("offsets out of range")
+        if content[start_offset:end_offset] != quoted_text:
+            raise ValueError("quoted_text mismatch")
         span_id = _uid("span")
         self.conn.execute(
             "INSERT INTO source_spans (id, document_id, start_offset, end_offset, page, quoted_text, created_at)"

@@ -91,7 +91,6 @@ def test_f12_hindsight_events():
     assert len(leaked) == 0
 
 
-@pytest.mark.xfail(strict=True, reason="F-05")
 def test_f05_span_validation():
     import tempfile, pathlib
     from reality_engine.database import Database
