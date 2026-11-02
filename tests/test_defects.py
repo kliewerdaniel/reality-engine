@@ -496,7 +496,7 @@ def test_no_third_party_runtime_deps():
         "typing", "dataclasses", "abc", "re", "io", "textwrap", "time",
         "contextlib", "functools", "decimal", "enum", "logging", "collections",
         "unittest", "threading", "queue", "random", "string", "struct",
-        "datetime"
+        "datetime", "reality_engine"
     }
     import ast
     src = inspect.getsource(db_module)

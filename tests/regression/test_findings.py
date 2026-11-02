@@ -210,3 +210,20 @@ def test_f01_timestamp_canonical():
     db.register_observation(d, src, ent, "v", "2026-10-05T12:00:00.500000+00:00")
     snap = materialize_world_state_at(db.conn, "2026-10-05T12:00:00Z")
     assert len(snap["observations"]) == 0
+
+
+@pytest.mark.xfail(strict=True, reason="F-02")
+def test_f02_schema_versioning():
+    import tempfile, pathlib
+    from reality_engine.database import Database
+    tmp = tempfile.mkdtemp()
+    db = Database(pathlib.Path(tmp)/"t.db")
+    assert db.conn.execute("SELECT name FROM sqlite_master WHERE name='schema_migrations'").fetchone() is not None
+    v = db.conn.execute("PRAGMA user_version").fetchone()[0]
+    assert v >= 1
+
+
+@pytest.mark.xfail(strict=True, reason="F-16")
+def test_f16_demo_asserts():
+    src = open("demo/evidence_foundation_demo.py").read()
+    assert "from reality_engine.revision import" in src or "import reality_engine.revision" in src
