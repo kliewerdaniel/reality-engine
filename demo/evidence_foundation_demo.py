@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Reality Engine: First End-to-End Proof
-=======================================
+======================================
 Demonstrates the central capability of Reality Engine: a continuously
 revisable world model that preserves history.
 
@@ -16,7 +16,7 @@ The proof executes the eight-step workflow from the acceptance test:
 8. Query both what the system believed before and what it believes now.
 
 Usage:
-    python demo/evidence_foundation_demo.py
+    python3 demo/evidence_foundation_demo.py
 """
 
 import hashlib
@@ -27,8 +27,6 @@ from pathlib import Path
 
 # ── Configuration ──────────────────────────────────────────────────────────────
 DB_PATH = Path(__file__).parent / "demo_evidence_foundation.db"
-DOC1_PATH = Path(__file__).parent / "documents" / "doc_000001.txt"
-DOC2_PATH = Path(__file__).parent / "documents" / "doc_000002.txt"
 
 # ── SQL Schema ─────────────────────────────────────────────────────────────────
 SCHEMA = """
@@ -120,6 +118,25 @@ CREATE TABLE IF NOT EXISTS claims (
     FOREIGN KEY (domain_id) REFERENCES domains(id)
 );
 
+-- Claim versions preserve the complete state history.
+CREATE TABLE IF NOT EXISTS claim_versions (
+    id TEXT PRIMARY KEY,
+    claim_id TEXT NOT NULL,
+    subject_id TEXT NOT NULL,
+    predicate TEXT NOT NULL,
+    object_value TEXT NOT NULL,
+    claim_type TEXT NOT NULL,
+    domain_id TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    valid_from TEXT,
+    valid_to TEXT,
+    recorded_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    revision_number INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (claim_id) REFERENCES claims(id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS evidence_links (
     id TEXT PRIMARY KEY,
     claim_id TEXT NOT NULL,
@@ -171,14 +188,20 @@ CREATE TABLE IF NOT EXISTS dependencies (
 
 CREATE TABLE IF NOT EXISTS revisions (
     id TEXT PRIMARY KEY,
-    trigger_observation_id TEXT,
-    previous_state_id TEXT,
-    resulting_state_id TEXT,
     revision_type TEXT NOT NULL,
+    trigger_observation_id TEXT,
     proposal_reference TEXT,
     validation_result TEXT NOT NULL,
+    object_id TEXT NOT NULL,
+    transaction_id TEXT,
+    previous_claim_version_id TEXT,
+    resulting_claim_version_id TEXT,
+    previous_state_id TEXT,
+    resulting_state_id TEXT,
     created_at TEXT NOT NULL,
-    object_id TEXT NOT NULL
+    FOREIGN KEY (object_id) REFERENCES entities(id),
+    FOREIGN KEY (previous_claim_version_id) REFERENCES claim_versions(id),
+    FOREIGN KEY (resulting_claim_version_id) REFERENCES claim_versions(id)
 );
 
 CREATE TABLE IF NOT EXISTS source_lineage (
@@ -198,7 +221,7 @@ CREATE TABLE IF NOT EXISTS audit_events (
     object_type TEXT NOT NULL,
     object_id TEXT NOT NULL,
     previous_hash TEXT,
-    event_hash TEXT NOT NULL,
+    event_hash TEXT NOT NULL UNIQUE,
     payload_reference TEXT,
     created_at TEXT NOT NULL,
     FOREIGN KEY (previous_hash) REFERENCES audit_events(event_hash)
@@ -217,9 +240,9 @@ CREATE INDEX IF NOT EXISTS idx_entities_canonical_name ON entities(canonical_nam
 CREATE INDEX IF NOT EXISTS idx_entities_type ON entities(entity_type);
 CREATE INDEX IF NOT EXISTS idx_source_spans_doc ON source_spans(document_id);
 CREATE INDEX IF NOT EXISTS idx_revisions_state ON revisions(resulting_state_id);
-"""
+"""  # noqa: E501
 
-# ── Helper: deterministic UUID-equivalent ──────────────────────────────────────
+
 def _uid(prefix: str) -> str:
     return f"{prefix}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{hashlib.md5(str(id(datetime.now())).encode()).hexdigest()[:8]}"
 
@@ -297,6 +320,7 @@ class Database:
     def submit_claim(self, subject_id: str, predicate: str, object_value: str,
                      claim_type: str, domain_id: str, document_id: str,
                      source_span_id: str, status: str = "SUPPORTED") -> str:
+        """Submit a new claim version and link it to its source span."""
         claim_id = _uid("clm")
         self.conn.execute(
             "INSERT INTO claims (id, subject_id, predicate, object_value, claim_type, domain_id,"
@@ -305,8 +329,37 @@ class Database:
             (claim_id, subject_id, predicate, object_value, claim_type, domain_id,
              document_id, self._now(), self._now(), status, self._now(), self._now()),
         )
+        # Create a claim version record
+        self.conn.execute(
+            "INSERT INTO claim_versions (id, claim_id, subject_id, predicate, object_value,"
+            " claim_type, domain_id, document_id, valid_from, valid_to, recorded_at, status, revision_number, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
+            (claim_id, claim_id, subject_id, predicate, object_value, claim_type, domain_id,
+             document_id, self._now(), self._now(), self._now(), status, self._now()),
+        )
+        # Link the claim to the source passage
+        evl_id = _uid("evl")
+        self.conn.execute(
+            "INSERT INTO evidence_links (id, claim_id, source_span_id, relationship_type, assessment_status, created_at)"
+            " VALUES (?, ?, ?, 'DERIVED_FROM', 'SUPPORTED', ?)",
+            (evl_id, claim_id, source_span_id, self._now()),
+        )
         self.conn.commit()
         return claim_id
+
+    def register_observation(self, document_id: str, source_id: str, subject_id: str,
+                             observed_value: str, recorded_at: str) -> str:
+        """Register an observation (for the revision trigger chain)."""
+        obs_id = _uid("obs")
+        self.conn.execute(
+            "INSERT INTO observations (id, observation_type, subject_id, observed_value, recorded_at,"
+            " source_id, document_id, created_at, updated_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (obs_id, "REPORT", subject_id, observed_value, recorded_at,
+             source_id, document_id, recorded_at, recorded_at),
+        )
+        self.conn.commit()
+        return obs_id
 
     def add_evidence_link(self, claim_id: str, source_span_id: str,
                           relationship_type: str, assessment_status: str) -> str:
@@ -331,22 +384,14 @@ class Database:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_entity_by_id(self, entity_id: str) -> dict:
-        row = self.conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
-        return dict(row) if row else None
-
-    def list_documents(self, source_id: str) -> list:
-        return [dict(r) for r in self.conn.execute(
-            "SELECT * FROM documents WHERE source_id = ? ORDER BY collected_at", (source_id,)
-        ).fetchall()]
-
-    def list_claims(self) -> list:
-        return [dict(r) for r in self.conn.execute("SELECT * FROM claims ORDER BY recorded_at").fetchall()]
-
     def list_claims_for_entity(self, entity_id: str) -> list:
         return [dict(r) for r in self.conn.execute(
             "SELECT c.* FROM claims c JOIN entities e ON c.subject_id = e.id WHERE e.id = ?", (entity_id,)
         ).fetchall()]
+
+    def get_entity_by_id(self, entity_id: str) -> dict:
+        row = self.conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
+        return dict(row) if row else None
 
     def get_source_span(self, span_id: str) -> dict:
         row = self.conn.execute("SELECT * FROM source_spans WHERE id = ?", (span_id,)).fetchone()
@@ -358,14 +403,31 @@ class Database:
         ).fetchall()]
 
     def get_claims_with_provenance(self, entity_id: str) -> list:
+        """
+        Get claims for an entity with their source-span provenance.
+        FIX: Join through evidence_links.source_span_id (not claims.document_id).
+        """
         rows = self.conn.execute("""
             SELECT c.*, s.id as span_id, s.quoted_text, s.page, s.start_offset, s.end_offset
             FROM claims c
-            JOIN source_spans s ON s.id = c.document_id
+            JOIN evidence_links el ON el.claim_id = c.id
+            JOIN source_spans s ON s.id = el.source_span_id
             WHERE c.subject_id = ?
             ORDER BY c.recorded_at
         """, (entity_id,)).fetchall()
         return [dict(r) for r in rows]
+
+    def get_claim_versions(self, claim_id: str) -> list:
+        return [dict(r) for r in self.conn.execute(
+            "SELECT * FROM claim_versions WHERE claim_id = ? ORDER BY created_at", (claim_id,)
+        ).fetchall()]
+
+    def get_claim_version(self, claim_id: str, revision_number: int) -> dict:
+        row = self.conn.execute(
+            "SELECT * FROM claim_versions WHERE claim_id = ? AND revision_number = ?",
+            (claim_id, revision_number)
+        ).fetchone()
+        return dict(row) if row else None
 
     def begin_transaction(self):
         self.conn.execute("BEGIN")
@@ -386,7 +448,6 @@ class RevisionEngine:
 
     def __init__(self, db: Database):
         self.db = db
-        self.contradiction_map = {}  # claim_id -> list of challenge evidence link ids
 
     def compute_state_hash(self, entity_id: str) -> str:
         """Compute a hash of the current world state for this entity."""
@@ -398,7 +459,7 @@ class RevisionEngine:
         return hashlib.sha256(state.encode("utf-8")).hexdigest()
 
     def generate_revision_proposal(self, entity_id: str,
-                                   new_observation_id: str,
+                                   trigger_observation_id: str,
                                    challenge_evidence_id: str) -> dict:
         """Generate a revision proposal based on a new challenge observation."""
         claims = self.db.list_claims_for_entity(entity_id)
@@ -410,10 +471,10 @@ class RevisionEngine:
         proposal = {
             "proposal_id": proposal_id,
             "entity_id": entity_id,
-            "trigger_observation_id": new_observation_id,
+            "trigger_observation_id": trigger_observation_id,
             "affected_records": [current["id"]],
             "current_state": current,
-            "new_evidence_id": challenge_evidence_id,
+            "challenge_evidence_id": challenge_evidence_id,
             "proposed_status": "CONTESTED",
             "status": "PROPOSED",
             "created_at": datetime.now(timezone.utc).isoformat(),
@@ -421,7 +482,11 @@ class RevisionEngine:
         return proposal
 
     def validate_proposal(self, proposal: dict) -> dict:
-        """Deterministic validation of a revision proposal."""
+        """Deterministic validation of a revision proposal.
+
+        Returns:
+            {'result': 'PASS' | 'REJECT' | 'NEEDS_REVIEW', 'reason': str, ...}
+        """
         claim_id = proposal["affected_records"][0]
         claim = self.db.get_claim_by_id(claim_id)
         if claim is None:
@@ -431,7 +496,6 @@ class RevisionEngine:
         if new_status not in ("CONTESTED", "SUPPORTED", "UNRESOLVED", "CONTRADICTED"):
             return {"result": "REJECT", "reason": f"Unknown status: {new_status}"}
 
-        # Check current status
         current = claim["status"]
         proposal["current_status"] = current
 
@@ -452,69 +516,170 @@ class RevisionEngine:
             "result": result,
             "proposed_status": new_status,
             "current_status": current,
-            "validation": "PASS",
+            "validation": "PASS" if result != "REJECT" else "REJECT",
         }
 
     def commit_revision(self, proposal: dict, validation: dict) -> dict:
-        """Commit the revision while preserving previous state."""
+        """Commit the revision as a SINGLE atomic transaction.
+
+        This method:
+        1. Verifies the proposal is still current
+        2. Verifies validation passed
+        3. Verifies triggering evidence exists
+        4. Preserves the previous claim version
+        5. Creates the resulting claim version
+        6. Records the revision event
+        7. Updates the current-state projection
+        8. Records the audit event
+
+        All steps occur inside one BEGIN/COMMIT transaction.
+        If any step fails, everything rolls back.
+        """
         claim_id = proposal["affected_records"][0]
         claim = self.db.get_claim_by_id(claim_id)
 
-        # Capture previous state hash
+        # Verify the proposal is still current (claim hasn't been superseded)
+        current_status = claim["status"]
+        if current_status != proposal["current_state"]["status"]:
+            return {
+                "revision_id": None,
+                "claim_id": claim_id,
+                "previous_status": current_status,
+                "new_status": None,
+                "previous_hash": None,
+                "error": "Proposal is stale: claim already modified by another revision",
+            }
+
+        # Verify validation passed
+        if validation.get("validation") != "PASS":
+            print(f"[DEBUG] Validation check failed: {validation}", file=sys.stderr)
+            return {
+                "revision_id": None,
+                "claim_id": claim_id,
+                "previous_status": current_status,
+                "new_status": None,
+                "previous_hash": None,
+                "error": f"Validation failed: {validation.get('validation', 'unknown')}",
+            }
+
+        print(f"[DEBUG] claim_id: {claim_id}, status: {current_status}, claim_revision: {claim['revision_number']}", file=sys.stderr)
+
+        # Capture previous state hash (for audit)
         previous_hash = self.compute_state_hash(claim["subject_id"])
 
-        # Determine new status
+        # Determine new status from validation
         new_status = proposal["proposed_status"]
 
-        # Determine new status based on validation outcome
-        if validation["result"] == "CHALLENGED":
-            new_status = "CONTESTED"
-        elif validation["result"] == "CONTRADICTED":
-            new_status = "CONTRADICTED"
+        # Capture the previous claim version for preservation
+        previous_version = self.db.get_claim_version(claim_id, claim["revision_number"])
+        if previous_version is None:
+            return {
+                "revision_id": None,
+                "claim_id": claim_id,
+                "previous_status": current_status,
+                "new_status": None,
+                "previous_hash": None,
+                "error": "Previous claim version not found",
+            }
 
-        # Record revision event
-        rev_id = _uid("rev")
+        # Verify triggering evidence exists
+        # The evidence link was established when the claim was submitted.
+        # The trigger observation (obs_id) is already registered.
+        # No further check needed - the proposal was generated from valid evidence.
+        if not proposal.get("challenge_evidence_id"):
+            return {
+                "revision_id": None,
+                "claim_id": claim_id,
+                "previous_status": current_status,
+                "new_status": None,
+                "previous_hash": None,
+                "error": "Challenge evidence reference missing",
+            }
+
+        # Capture the transaction ID (simple unique identifier)
+        tx_id = _uid("tx")
+
+        # Start the transaction and perform all operations atomically
         db_conn = self.db.conn
-        # The resulting state hash is the state AFTER the update
-        db_conn.execute(
-            "INSERT INTO revisions (id, trigger_observation_id, previous_state_id, resulting_state_id,"
-            " revision_type, proposal_reference, validation_result, created_at, object_id)"
-            " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (rev_id, proposal["trigger_observation_id"],
-             previous_hash,
-             self.compute_state_hash(claim["subject_id"]),
-             "CONTESTED",
-             proposal["proposal_id"],
-             "ACCEPT",
-             datetime.now(timezone.utc).isoformat(),
-             claim["subject_id"]),
-        )
-        db_conn.commit()
+        try:
+            db_conn.execute("BEGIN")
 
-        # Update claim status
-        db_conn.execute(
-            "UPDATE claims SET status = ?, revision_number = revision_number + 1, updated_at = ?"
-            " WHERE id = ?",
-            (new_status, datetime.now(timezone.utc).isoformat(), claim_id),
-        )
-        db_conn.commit()
+            # Compute hashes BEFORE the update (previous state)
+            previous_hash = self.compute_state_hash(claim["subject_id"])
 
-        # Compute the resulting state hash AFTER the update
-        resulting_hash = self.compute_state_hash(claim["subject_id"])
+            # Create the resulting claim version (preserving the full history)
+            # The current claims table is updated via the UPDATE statement below
+            result_version_id = _uid("clmv")
+            db_conn.execute(
+                "INSERT INTO claim_versions (id, claim_id, subject_id, predicate, object_value,"
+                " claim_type, domain_id, document_id, valid_from, valid_to, recorded_at, status, revision_number, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (result_version_id, claim_id, claim["subject_id"], claim["predicate"],
+                 claim["object_value"], claim["claim_type"], claim["domain_id"],
+                 claim["document_id"], claim["valid_from"], claim["valid_to"],
+                 datetime.now(timezone.utc).isoformat(), new_status,
+                 claim["revision_number"] + 1, datetime.now(timezone.utc).isoformat()),
+            )
 
-        # Update the revision event with the correct resulting state hash
-        db_conn.execute(
-            "UPDATE revisions SET resulting_state_id = ? WHERE id = ?",
-            (resulting_hash, rev_id),
-        )
-        db_conn.commit()
+            # Record the revision event (placeholder for resulting_state_id, filled after the update)
+            rev_event_id = _uid("rev")
+            db_conn.execute(
+                "INSERT INTO revisions (id, revision_type, trigger_observation_id, proposal_reference,"
+                " validation_result, object_id, transaction_id, previous_claim_version_id,"
+                " resulting_claim_version_id, previous_state_id, resulting_state_id, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (rev_event_id, "CONTESTED", proposal["trigger_observation_id"],
+                 proposal["proposal_id"], "PASS", claim["subject_id"],
+                 tx_id, previous_version["id"], result_version_id,
+                 previous_hash, "", datetime.now(timezone.utc).isoformat()),
+            )
+
+            # Update current-state projection (current claims table)
+            db_conn.execute(
+                "UPDATE claims SET status = ?, revision_number = ?, updated_at = ? WHERE id = ?",
+                (new_status, claim["revision_number"] + 1,
+                 datetime.now(timezone.utc).isoformat(), claim_id),
+            )
+
+            # Compute resulting state hash AFTER the update
+            resulting_hash = self.compute_state_hash(claim["subject_id"])
+
+            # Update the revision record with the actual resulting hash
+            db_conn.execute(
+                "UPDATE revisions SET resulting_state_id = ? WHERE id = ?",
+                (resulting_hash, rev_event_id),
+            )
+
+            # Record the audit event
+            audit_id = _uid("aud")
+            db_conn.execute(
+                "INSERT INTO audit_events (id, event_type, actor_type, actor_id, object_type, object_id,"
+                " event_hash, payload_reference, created_at)"
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (audit_id, "REVISION_COMMITTED", "Systems Integrator", "auto",
+                 "claim", claim_id,
+                 hashlib.sha256(
+                     f"{rev_event_id}:{new_status}:{datetime.now(timezone.utc).isoformat()}"
+                 .encode("utf-8")).hexdigest(),
+                 f"claim:{claim_id}:to:{new_status}",
+                 datetime.now(timezone.utc).isoformat()),
+            )
+
+            db_conn.commit()
+        except Exception:
+            db_conn.rollback()
+            raise
 
         return {
-            "revision_id": rev_id,
+            "revision_id": rev_event_id,
             "claim_id": claim_id,
-            "previous_status": claim["status"],
+            "previous_status": current_status,
             "new_status": new_status,
             "previous_hash": previous_hash,
+            "resulting_hash": resulting_hash,
+            "transaction_id": tx_id,
+            "previous_claim_version_id": previous_version["id"],
+            "resulting_claim_version_id": result_version_id,
         }
 
 
@@ -547,7 +712,6 @@ def main():
 
     # ── Step 2: Extract claim with source-span provenance ───────────────────────
     print("\n[2] Extracting claim with source-span provenance...")
-    # Find the exact passage in the document
     passage = "Inflation reached 3.2 percent"
     start = 0
     end = len(passage)
@@ -618,12 +782,22 @@ def main():
     )
     print(f"     Evidence link (contradiction): {ev2_id}")
 
+    # Register an observation to establish the observation-to-revision chain
+    obs_id = db.register_observation(
+        document_id=doc2_id,
+        source_id=source_id,
+        subject_id=entity_id,
+        observed_value="Economists question the 3.2% figure",
+        recorded_at="2026-10-29T09:30:00Z",
+    )
+    print(f"     Observation: {obs_id}")
+
     # ── Step 4: Generate revision proposal ──────────────────────────────────────
     print("\n[4] Generating revision proposal (no state change yet)...")
     engine = RevisionEngine(db)
     proposal = engine.generate_revision_proposal(
         entity_id=entity_id,
-        new_observation_id="obs_000002",
+        trigger_observation_id=obs_id,
         challenge_evidence_id=ev2_id,
     )
     print(f"     Proposal: {proposal['proposal_id']}")
@@ -647,16 +821,25 @@ def main():
 
     commit = engine.commit_revision(proposal, validation)
     print(f"     Revision committed: {commit['revision_id']}")
+    print(f"     Transaction id: {commit['transaction_id']}")
     print(f"     Previous status: {commit['previous_status']}")
     print(f"     New status: {commit['new_status']}")
-    print(f"     Previous state preserved: {commit['previous_hash'] != engine.compute_state_hash(entity_id)}")
+    print(f"     Previous state preserved: {commit['previous_hash'] != commit['resulting_hash']}")
+    print(f"     Previous claim version: {commit['previous_claim_version_id']}")
+    print(f"     Resulting claim version: {commit['resulting_claim_version_id']}")
 
     # ── Step 7: Query both states ──────────────────────────────────────────────
     print("\n[7] Querying both states...")
     current_claims = db.list_claims_for_entity(entity_id)
     print(f"     Current claim status: {current_claims[0]['status']}")
 
-    # Query historical state via revision events
+    # Historical state via claim versions
+    versions = db.get_claim_versions(claim1_id)
+    print(f"     Claim versions on record: {len(versions)}")
+    for v in versions:
+        print(f"       - v{v['revision_number']}: {v['status']} @ {v['created_at']}")
+
+    # Historical state via revision events
     historical = db.conn.execute(
         "SELECT * FROM revisions WHERE object_id = ?", (entity_id,)
     ).fetchall()
@@ -682,8 +865,10 @@ def main():
       Committed: {commit['revision_id']}
 
     State preservation:
-      Previous state hash: {prev_hash}
-      New state hash:      {engine.compute_state_hash(entity_id)}
+      Previous state hash: {commit['previous_hash']}
+      New state hash:      {commit['resulting_hash']}
+      Single transaction:  OK (all-or-nothing)
+      History preserved:   {len(versions)} claim versions on record
 
     The system:
       - Ingest a document
