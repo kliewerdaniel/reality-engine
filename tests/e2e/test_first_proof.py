@@ -1,5 +1,10 @@
-import subprocess, sys, tempfile, pathlib
+import pathlib
+import subprocess
+import sys
+import tempfile
+
 from reality_engine.database import Database
+
 
 def test_e2e_first_proof():
     tmp = tempfile.mkdtemp()
@@ -14,5 +19,5 @@ def test_e2e_first_proof():
     assert clm
     # demo smoke with temp db
     demo = pathlib.Path(__file__).resolve().parents[2]/"demo"/"evidence_foundation_demo.py"
-    r = subprocess.run([sys.executable, str(demo), "--db", str(pathlib.Path(tmp)/"demo.db")], capture_output=True, text=True)
+    r = subprocess.run([sys.executable, str(demo), "--db", str(pathlib.Path(tmp)/"demo.db")], check=False, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr

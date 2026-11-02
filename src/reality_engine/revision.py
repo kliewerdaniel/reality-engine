@@ -8,10 +8,10 @@ All writes are transactional (BEGIN/COMMIT/ROLLBACK). The audit chain is hashed
 and chains each event to the previous one.
 """
 import hashlib
-import sqlite3
-from datetime import datetime, timezone
-from typing import Any
 import uuid
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 
 class RevisionEngine:
@@ -40,10 +40,10 @@ class RevisionEngine:
 
         links = self.db.get_evidence_links_for_claim(claim_id)
 
-        def rule_provenance_present(db, proposal, claim, links):
+        def rule_provenance_present(db: Any, proposal: dict[str, Any], claim: dict[str, Any], links: list[dict[str, Any]]) -> tuple[bool, str]:
             return (len(links) > 0, f"{len(links)} evidence link(s) found")
 
-        def rule_span_verified(db, proposal, claim, links):
+        def rule_span_verified(db: Any, proposal: dict[str, Any], claim: dict[str, Any], links: list[dict[str, Any]]) -> tuple[bool, str]:
             if not links:
                 return (False, "no evidence links on claim")
             for lk in links:
@@ -60,7 +60,7 @@ class RevisionEngine:
                     return (False, f"fabricated quote not in document for span {src_span}")
             return (True, "all spans verified")
 
-        def rule_temporal_consistency(db, proposal, claim, links):
+        def rule_temporal_consistency(db: Any, proposal: dict[str, Any], claim: dict[str, Any], links: list[dict[str, Any]]) -> tuple[bool, str]:
             # valid time must not exceed collection time (recorded_at)
             vf = claim.get("valid_from")
             ra = claim.get("recorded_at")
@@ -68,9 +68,8 @@ class RevisionEngine:
                 return (False, "valid_from exceeds recorded_at")
             return (True, "temporal consistency ok")
 
-        def rule_source_independence(db, proposal, claim, links):
+        def rule_source_independence(db: Any, proposal: dict[str, Any], claim: dict[str, Any], links: list[dict[str, Any]]) -> tuple[bool, str]:
             # challenge evidence source must differ from claim source
-            challenge_span_id = None
             # challenge_evidence_id may be span id
             ce = proposal.get("challenge_evidence_id")
             if ce:
@@ -85,14 +84,14 @@ class RevisionEngine:
                         return (False, "challenge source not independent")
             return (True, "source independence ok")
 
-        def rule_proposal_not_stale(db, proposal, claim, links):
+        def rule_proposal_not_stale(db: Any, proposal: dict[str, Any], claim: dict[str, Any], links: list[dict[str, Any]]) -> tuple[bool, str]:
             cur = claim.get("revision_number")
             ref = proposal.get("current_state", {}).get("revision_number")
             if ref is not None and ref != cur:
                 return (False, f"proposal stale: {ref} != {cur}")
             return (True, f"claim revision {cur} matches proposal reference")
 
-        rules_registry = [
+        rules_registry: list[tuple[str, Callable[[Any, dict[str, Any], dict[str, Any], list[dict[str, Any]]], tuple[bool, str]]]] = [
             ("provenance_present", rule_provenance_present),
             ("span_verified", rule_span_verified),
             ("temporal_consistency", rule_temporal_consistency),
@@ -277,7 +276,6 @@ class RevisionEngine:
         Returns:
             A unique ID string.
         """
-        import uuid
         return f"{prefix}_{uuid.uuid4().hex[:12]}"
 
     def _now(self) -> str:
@@ -286,5 +284,4 @@ class RevisionEngine:
         Returns:
             A UTC timestamp string.
         """
-        from datetime import datetime, timezone
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()

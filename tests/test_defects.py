@@ -5,12 +5,11 @@ post-fix behavior. Tests use an in-memory SQLite database - no network access.
 """
 import sqlite3
 import sys
-import uuid
-
-import pytest
 
 # Ensure package is importable
 from pathlib import Path
+
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
@@ -350,7 +349,6 @@ def test_version_id_distinct_from_claim_id(db_with_data):
 
 def test_resolve_entity_ranked_candidates(db_with_data):
     """D10: resolve_entity must return ranked candidates, not LIMIT 1."""
-    from reality_engine.database import Database, _uid
     result = db_with_data["db"].resolve_entity("Inflation")
     assert isinstance(result, list), "resolve_entity must return a list"
     if result:
@@ -359,7 +357,6 @@ def test_resolve_entity_ranked_candidates(db_with_data):
 
 def test_resolve_entity_case_insensitive(db_with_data):
     """D10: resolution should be case-insensitive."""
-    from reality_engine.database import Database, _uid
     result = db_with_data["db"].resolve_entity("inflation")
     assert result, "Case-insensitive resolution should find the entity"
 
@@ -476,27 +473,28 @@ def test_from_import_star():
 
 def test_demo_runs_with_exit_code_zero():
     """D12: demo script must exit with 0 (assertions present)."""
-    from pathlib import Path
     import subprocess
     import sys
+    from pathlib import Path
     demo = Path(__file__).resolve().parent.parent / "demo" / "evidence_foundation_demo.py"
     result = subprocess.run(
         [sys.executable, str(demo)],
-        capture_output=True, text=True, cwd=str(demo.parent)
+        check=False, capture_output=True, text=True, cwd=str(demo.parent)
     )
     assert result.returncode == 0, f"Demo failed: {result.stderr}"
 
 
 def test_no_third_party_runtime_deps():
     """D2: Core code imports only stdlib."""
-    import reality_engine.database as db_module
     import inspect
+
+    import reality_engine.database as db_module
     stdlib_modules = {
         "sqlite3", "hashlib", "uuid", "datetime", "os", "json", "pathlib",
         "typing", "dataclasses", "abc", "re", "io", "textwrap", "time",
         "contextlib", "functools", "decimal", "enum", "logging", "collections",
         "unittest", "threading", "queue", "random", "string", "struct",
-        "datetime", "reality_engine"
+        "types", "reality_engine"
     }
     import ast
     src = inspect.getsource(db_module)

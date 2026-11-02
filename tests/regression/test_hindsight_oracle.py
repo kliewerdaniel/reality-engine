@@ -1,7 +1,10 @@
-import tempfile, pathlib
-from datetime import datetime, timedelta, timezone
-from reality_engine.database import Database
+import pathlib
+import tempfile
+from datetime import UTC, datetime, timedelta
+
 from reality_engine.core.temporal import reconstruct_claims_at
+from reality_engine.database import Database
+
 
 def test_hindsight_oracle():
     tmp = tempfile.mkdtemp()
@@ -9,7 +12,7 @@ def test_hindsight_oracle():
     dom = db.register_domain("Econ","d")
     src = db.register_source("Src","NEWS","econ")
     ent = db.register_entity("Inflation","ECONOMIC_MEASUREMENT",dom,["cpi"])
-    base = datetime(2026,1,1,tzinfo=timezone.utc)
+    base = datetime(2026,1,1,tzinfo=UTC)
     for i in range(200):
         t = base + timedelta(days=i)
         doc = db.ingest_document(src, f"claim {i}", "article", "en", t.isoformat())

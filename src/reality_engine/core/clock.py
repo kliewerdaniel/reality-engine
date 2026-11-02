@@ -1,6 +1,7 @@
 """Injectable clock abstraction (F-01)."""
 from __future__ import annotations
-from datetime import datetime, timezone
+
+from datetime import UTC, datetime
 from typing import Protocol
 
 
@@ -10,7 +11,7 @@ class Clock(Protocol):
 
 class SystemClock:
     def now(self) -> datetime:
-        return datetime.now(timezone.utc)
+        return datetime.now(UTC)
 
 
 class FixedClock:
@@ -24,6 +25,6 @@ class FixedClock:
 def canonical_utc(dt: datetime) -> str:
     """Fixed-width UTC format: YYYY-MM-DDTHH:MM:SS.ffffffZ"""
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    dt = dt.astimezone(timezone.utc)
+        dt = dt.replace(tzinfo=UTC)
+    dt = dt.astimezone(UTC)
     return dt.strftime("%Y-%m-%dT%H:%M:%S.%f") + "Z"
