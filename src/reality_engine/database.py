@@ -299,14 +299,16 @@ def _uid(prefix: str) -> str:
 class _Transaction:
     """Context manager for atomic database transactions."""
 
-    def __init__(self, conn: sqlite3.Connection):
+    def __init__(self, conn: sqlite3.Connection, db=None):
         self.conn = conn
+        self.db = db
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.execute("PRAGMA busy_timeout = 5000")
         self._closed = False
 
     def __enter__(self) -> "_Transaction":
-        self.conn._in_tx = True
+        if self.db is not None:
+            self.db._in_tx = True
         self.conn.execute("BEGIN IMMEDIATE")
         return self
 
@@ -317,7 +319,8 @@ class _Transaction:
             else:
                 self.conn.commit()
         finally:
-            self.conn._in_tx = False
+            if self.db is not None:
+                self.db._in_tx = False
         return False
 
 
@@ -329,6 +332,7 @@ class Database:
     def __init__(self, path: Path, clock=None):
         self.path = path
         self.clock = clock
+        self._in_tx = False
         self.conn = self._connect(path)
         self.conn.isolation_level = None
         self.conn.execute("PRAGMA foreign_keys = ON")
@@ -345,7 +349,7 @@ class Database:
         if cur < 1:
             self.conn.execute("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?)", (self._now(),))
             self.conn.execute("PRAGMA user_version = 1")
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         self.conn.row_factory = sqlite3.Row
 
@@ -370,7 +374,7 @@ class Database:
 
         All database operations within the with block succeed or fail together.
         """
-        return _Transaction(self.conn)
+        return _Transaction(self.conn, self)
 
     # ── Domains ────────────────────────────────────────────────────────────────
 
@@ -381,7 +385,7 @@ class Database:
             " VALUES (?, ?, ?, ?, ?)",
             (dom_id, name, name.lower(), description, self._now()),
         )
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         return dom_id
 
@@ -394,7 +398,7 @@ class Database:
             " VALUES (?, ?, ?, ?, ?, ?)",
             (src_id, name, source_type, canonical_domain, self._now(), self._now()),
         )
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         return src_id
 
@@ -421,7 +425,7 @@ class Database:
              content_hash, content_type, content, language, published_at,
              collected_at, processing_status, self._now(), self._now()),
         )
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         return doc_id
 
@@ -443,7 +447,7 @@ class Database:
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
             (span_id, document_id, start_offset, end_offset, page, quoted_text, self._now()),
         )
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         return span_id
 
@@ -477,7 +481,7 @@ class Database:
                     " VALUES (?, ?, ?, ?, ?, ?)",
                     (ali_id, ent_id, alias, alias, normalized, self._now()),
                 )
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         return ent_id
 
@@ -559,7 +563,7 @@ class Database:
             (obs_id, observation_type, subject_id, observed_value, recorded_at,
              source_id, document_id, recorded_at, recorded_at),
         )
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         return obs_id
 
@@ -614,7 +618,7 @@ class Database:
             (evt_id, event_type, event_description, occurred_at, occurred_on,
              recorded_at, source_id, document_id, observation_ids, recorded_at),
         )
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         return evt_id
 
@@ -674,7 +678,7 @@ class Database:
             (rel_id, relationship_type, subject_id, object_id, predicate,
              valid_from, valid_to, recorded_at, source_id, document_id, recorded_at),
         )
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         return rel_id
 
@@ -745,7 +749,7 @@ class Database:
             " VALUES (?, ?, ?, 'DERIVED_FROM', 'SUPPORTED', ?)",
             (evl_id, claim_id, source_span_id, recorded_at),
         )
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         return claim_id
 
@@ -816,22 +820,14 @@ class Database:
             " VALUES (?, ?, ?, ?, ?, ?)",
             (evl_id, claim_id, source_span_id, relationship_type, assessment_status, self._now()),
         )
-        if not getattr(self.conn, "_in_tx", False):
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
         return evl_id
 
-    def delete_entity(self, entity_id: str) -> None:
-        """Delete an entity and all related records (transactional).
-
-        NOTE: This is destructive — use only in test/seed scripts.
-        """
-        self.conn.execute("DELETE FROM entity_aliases WHERE entity_id = ?", (entity_id,))
-        self.conn.execute("DELETE FROM claims WHERE subject_id = ?", (entity_id,))
-        self.conn.execute("DELETE FROM relationships WHERE subject_id = ? OR object_id = ?",
-                          (entity_id, entity_id))
-        self.conn.execute("DELETE FROM observations WHERE subject_id = ?", (entity_id,))
-        self.conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
-        if not getattr(self.conn, "_in_tx", False):
+    def retire_entity(self, entity_id: str) -> None:
+        """Retire an entity (append-only: status RETIRED, audit event)."""
+        self.conn.execute("UPDATE entities SET status='RETIRED', updated_at=? WHERE id=?", (self._now(), entity_id))
+        if not getattr(self, "_in_tx", False):
             self.conn.commit()
 
     def close(self):
