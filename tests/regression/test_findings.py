@@ -56,7 +56,6 @@ def test_f10_asof_status():
     past = reconstruct_claims_at(db.conn, ent, "2026-10-15T00:00:00Z")
     assert past and past[0]["status"] == "SUPPORTED"
 
-@pytest.mark.xfail(strict=True, reason="F-11")
 def test_f11_relationships_filter():
     import tempfile, pathlib
     from reality_engine.database import Database

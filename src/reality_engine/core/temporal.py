@@ -199,7 +199,8 @@ def materialize_world_state_at(
     entities = []
     for row in conn.execute("SELECT * FROM entities ORDER BY canonical_name").fetchall():
         entities.append(dict(row))
-    relationships = get_relationships_since(conn, timestamp)
+    rows = conn.execute("SELECT * FROM relationships WHERE recorded_at <= ? ORDER BY recorded_at", (timestamp,)).fetchall()
+    relationships = [dict(r) for r in rows]
     events = reconstruct_events_at(conn, None, timestamp)
     revision_count = conn.execute(
         "SELECT COUNT(*) as c FROM revisions WHERE created_at <= ?", (timestamp,)
