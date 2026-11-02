@@ -200,7 +200,7 @@ class RevisionEngine:
             # Update current-state projection (current claims table)
             db_conn.execute(
                 "UPDATE claims SET status = ?, revision_number = ?, updated_at = ? WHERE id = ?",
-                ("CONTESTED", claim["revision_number"] + 1, now, claim_id),
+                (proposal.get("proposed_status","CONTESTED"), claim["revision_number"] + 1, now, claim_id),
             )
 
             # Compute resulting state hash AFTER the update
@@ -213,7 +213,7 @@ class RevisionEngine:
                 "validation_result, object_id, transaction_id, previous_claim_version_id, "
                 "resulting_claim_version_id, previous_state_id, resulting_state_id, created_at) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (rev_event_id, "CONTESTED", proposal["trigger_observation_id"],
+                (rev_event_id, proposal.get("proposed_status","CONTESTED"), proposal["trigger_observation_id"],
                  proposal["proposal_id"], "PASS", claim["subject_id"],
                  tx_id, previous_version["id"], result_version_id,
                  previous_hash, resulting_hash, now),
@@ -226,7 +226,7 @@ class RevisionEngine:
             ).fetchone()
             prev_audit_hash = prev_row[0] if prev_row else None
             payload = {"revision_id": rev_event_id, "claim_id": claim_id,
-                       "new_status": "CONTESTED", "created_at": now}
+                       "new_status": proposal.get("proposed_status","CONTESTED"), "created_at": now}
             import json as _json
             event_hash = hashlib.sha256(
                 ((prev_audit_hash or "") + _json.dumps(payload, sort_keys=True)).encode("utf-8")
@@ -250,7 +250,7 @@ class RevisionEngine:
             "revision_id": rev_event_id,
             "claim_id": claim_id,
             "previous_status": current_status,
-            "new_status": "CONTESTED",
+            "new_status": proposal.get("proposed_status","CONTESTED"),
             "previous_hash": previous_hash,
             "resulting_hash": resulting_hash,
             "transaction_id": tx_id,

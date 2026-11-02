@@ -159,7 +159,6 @@ def test_f13_validator_fail_closed():
     v = eng.validate_proposal(proposal)
     assert v["result"] != "ACCEPT"
 
-@pytest.mark.xfail(strict=True, reason="F-14")
 def test_f14_proposed_status_honored():
     import tempfile, pathlib
     from reality_engine.database import Database
@@ -181,7 +180,6 @@ def test_f14_proposed_status_honored():
     out = eng.commit_revision(prop, val)
     assert out.get("new_status") == "SUPERSEDED"
 
-@pytest.mark.xfail(strict=True, reason="F-15")
 def test_f15_audit_chain():
     from reality_engine.revision import RevisionEngine
     assert hasattr(RevisionEngine, "verify_audit_chain")
