@@ -1,0 +1,22 @@
+=== pytest ===
+collected 20 items
+
+tests/test_defects.py ....................                               [100%]
+
+============================== 20 passed in 0.22s ==============================
+=== ruff ===
+
+Found 59 errors.
+[*] 41 fixable with the `--fix` option (13 hidden fixes can be enabled with the `--unsafe-fixes` option).
+=== mypy ===
+src/reality_engine/core/temporal.py:192: error: Argument 2 to "reconstruct_observations_at" has incompatible type "None"; expected "str"  [arg-type]
+src/reality_engine/core/temporal.py:197: error: Argument 2 to "reconstruct_events_at" has incompatible type "None"; expected "str"  [arg-type]
+Found 34 errors in 2 files (checked 12 source files)
+=== check_links ===
+All documentation links are valid.
+=== lint_docs ===
+  - /Users/danielkliewer/Projects/reality-engine/docs/reports/baseline-2026-11-02.md:47: Line longer than 100 characters
+  - /Users/danielkliewer/Projects/reality-engine/docs/reports/baseline-2026-11-02.md:51: Line longer than 100 characters
+  - /Users/danielkliewer/Projects/reality-engine/docs/reports/baseline-2026-11-02.md:89: Line longer than 100 characters
+=== demo ===
+demo exit=0

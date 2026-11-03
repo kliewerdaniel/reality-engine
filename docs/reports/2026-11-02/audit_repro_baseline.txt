@@ -1,0 +1,24 @@
+[REPRODUCED] F-03 ingest_document fabricates canonical_url/native_id/status  -- url=https://example.com/doc native_id=native_doc__38.. status=PROCESSED
+[REPRODUCED] F-04 no content-hash deduplication  -- 2 rows share one content_hash
+[REPRODUCED] F-05 extract_source_span accepts quote not in doc / offsets out of range  -- accepted
+[REPRODUCED] F-05 submit_claim accepts span belonging to a different document  -- accepted
+[REPRODUCED] F-07 submit_claim sets valid_from = recorded_at (bitemporal conflation)  -- valid_from=2026-10-02T00:00:00Z recorded_at=2026-10-02T00:00:00Z
+[REPRODUCED] F-13 validator: proposal_not_stale passes with wrong revision_number  -- claim revision 1 matches proposal reference
+[REPRODUCED] F-13 validator: rules that are unconditional placeholders  -- ['temporal_consistency', 'source_independence']
+[REPRODUCED] F-13 validator: span_verified passes for fabricated quote  -- span span__6d8a27ff8b60465591426283d43e293b exists
+[REPRODUCED] F-14 commit_revision hardcodes CONTESTED (ignores proposed_status=SUPERSEDED)  -- new_status=CONTESTED
+[REPRODUCED] F-15 audit chain: previous_hash is NULL on every event (not chained)  -- 2 events, prev_hashes=[None, None]
+[REPRODUCED] F-15 no verify_audit_chain() exists
+[REPRODUCED] F-06 audit_events rows are mutable (no trigger / no tamper detection)  -- UPDATE succeeded silently
+[REPRODUCED] F-06 documents.content mutable; content_hash no longer matches and nothing notices  -- UPDATE succeeded silently
+[REPRODUCED] F-10 as-of 2026-10-15 reports CURRENT status, not the status believed then  -- as-of status=CONTESTED (should be SUPPORTED)
+[REPRODUCED] F-11 materialize_world_state_at: relationships filtered with >= (leaks future, drops past)  -- snapshot@2026-12-01 contains relationships recorded ['2026-12-15T00:00:00Z']
+[REPRODUCED] F-12 materialize_world_state_at: events recorded AFTER cutoff leak into snapshot (hindsight)  -- 1 event(s) known only after cutoff appear in the 2026-10-05 snapshot
+[REPRODUCED] F-12 snapshot at year 2000 still lists all entities  -- 2 entities
+[REPRODUCED] F-08 transaction(): Database methods self-commit, so rollback does not undo them  -- 1 row survived the rollback
+[REPRODUCED] F-09 delete_entity crashes on entity with claims (FK) / violates P4 by design  -- IntegrityError: FOREIGN KEY constraint failed
+[ok        ] F-01 mixed 'Z' vs '+00:00' timestamps: observation recorded exactly at cutoff instant  -- found 1 (1 is correct for this case)
+[REPRODUCED] F-01 timestamp compare: obs recorded 0.5s AFTER cutoff is included  -- 2 observations (expected 1)
+[latent    ] compute_state_hash input query has ORDER BY: False (code inspection only; not counted as a reproduced defect)
+
+20 of 21 checks reproduced a defect

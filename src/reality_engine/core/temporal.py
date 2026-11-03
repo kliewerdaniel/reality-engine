@@ -13,7 +13,7 @@ Example:
 
 import sqlite3
 from datetime import datetime
-from typing import Type, Any, Literal
+from typing import Any
 
 # ── Bitemporal helpers ──────────────────────────────────────────────────────────
 
@@ -40,7 +40,7 @@ def bitemporal_key(recorded_at: str, valid_from: str | None = None,
 
 # ── Bitemporal query helpers ────────────────────────────────────────────────────
 
-def get_observations_in_interval(conn, valid_from_min: str, valid_from_max: str) -> list:
+def get_observations_in_interval(conn: sqlite3.Connection, valid_from_min: str, valid_from_max: str) -> list[dict[str, Any]]:
     """Get observations whose valid_from falls within the interval."""
     rows = conn.execute(
         "SELECT * FROM observations WHERE valid_from IS NOT NULL"
@@ -50,7 +50,7 @@ def get_observations_in_interval(conn, valid_from_min: str, valid_from_max: str)
     return [dict(r) for r in rows]
 
 
-def get_observations_since(conn, since: str) -> list:
+def get_observations_since(conn: sqlite3.Connection, since: str) -> list[dict[str, Any]]:
     """Get observations recorded at or after the given timestamp."""
     rows = conn.execute(
         "SELECT * FROM observations WHERE recorded_at >= ? ORDER BY recorded_at", (since,)
@@ -58,7 +58,7 @@ def get_observations_since(conn, since: str) -> list:
     return [dict(r) for r in rows]
 
 
-def get_relationships_in_interval(conn, valid_from_min: str, valid_from_max: str) -> list:
+def get_relationships_in_interval(conn: sqlite3.Connection, valid_from_min: str, valid_from_max: str) -> list[dict[str, Any]]:
     """Get relationships whose valid_from falls within the interval."""
     rows = conn.execute(
         "SELECT * FROM relationships WHERE valid_from IS NOT NULL"
@@ -68,7 +68,7 @@ def get_relationships_in_interval(conn, valid_from_min: str, valid_from_max: str
     return [dict(r) for r in rows]
 
 
-def get_relationships_since(conn, since: str) -> list:
+def get_relationships_since(conn: sqlite3.Connection, since: str) -> list[dict[str, Any]]:
     """Get relationships recorded at or after the given timestamp."""
     rows = conn.execute(
         "SELECT * FROM relationships WHERE recorded_at >= ? ORDER BY recorded_at", (since,)
@@ -80,9 +80,9 @@ def get_relationships_since(conn, since: str) -> list:
 
 def reconstruct_observations_at(
     conn: sqlite3.Connection,
-    entity_id: str = None,
-    timestamp: str = None
-) -> list:
+    entity_id: str | None = None,
+    timestamp: str | None = None
+) -> list[dict[str, Any]]:
     """Reconstruct what the system understood about an entity at a given point in time.
 
     Uses recorded_at (transaction time) as the cutoff: only observations recorded
@@ -104,7 +104,7 @@ def reconstruct_observations_at(
             " WHERE subject_id = ? AND recorded_at <= ?"
             " ORDER BY recorded_at"
         )
-        params = (entity_id, timestamp)
+        params: tuple[Any, ...] = (entity_id, timestamp)
     else:
         query = (
             "SELECT * FROM observations"
@@ -118,9 +118,9 @@ def reconstruct_observations_at(
 
 def reconstruct_claims_at(
     conn: sqlite3.Connection,
-    entity_id: str = None,
-    timestamp: str = None
-) -> list:
+    entity_id: str | None = None,
+    timestamp: str | None = None
+) -> list[dict[str, Any]]:
     """Reconstruct what the system's understanding of a claim at a given time.
 
     Returns claim versions recorded before or at the timestamp.
@@ -137,30 +137,34 @@ def reconstruct_claims_at(
     """
     if entity_id:
         query = (
-            "SELECT * FROM claims"
-            " WHERE subject_id = ? AND recorded_at <= ?"
-            " ORDER BY recorded_at"
+            "SELECT cv.claim_id AS id, cv.* FROM claim_versions cv "
+            "WHERE cv.subject_id = ? AND cv.recorded_at <= ? "
+            "AND cv.recorded_at = (SELECT MAX(cv2.recorded_at) FROM claim_versions cv2 "
+            "WHERE cv2.claim_id = cv.claim_id AND cv2.recorded_at <= ?) "
+            "ORDER BY cv.recorded_at"
         )
-        params = (entity_id, timestamp)
+        params: tuple[Any, ...] = (entity_id, timestamp, timestamp)
     else:
         query = (
-            "SELECT * FROM claims"
-            " WHERE recorded_at <= ?"
-            " ORDER BY recorded_at"
+            "SELECT cv.claim_id AS id, cv.* FROM claim_versions cv "
+            "WHERE cv.recorded_at <= ? "
+            "AND cv.recorded_at = (SELECT MAX(cv2.recorded_at) FROM claim_versions cv2 "
+            "WHERE cv2.claim_id = cv.claim_id AND cv2.recorded_at <= ?) "
+            "ORDER BY cv.recorded_at"
         )
-        params = (timestamp,)
+        params = (timestamp, timestamp)
     rows = conn.execute(query, params).fetchall()
     return [dict(r) for r in rows]
 
 
 def reconstruct_events_at(
     conn: sqlite3.Connection,
-    start_date: str = None,
-    end_date: str = None
-) -> list:
+    start_date: str | None = None,
+    end_date: str | None = None
+) -> list[dict[str, Any]]:
     """Reconstruct events up to a given point in time."""
     query = "SELECT * FROM events WHERE 1=1"
-    params = []
+    params: list[Any] = []
     if start_date:
         query += " AND occurred_at >= ?"
         params.append(start_date)
@@ -174,10 +178,16 @@ def reconstruct_events_at(
 
 # ── Bitemporal state materialization ────────────────────────────────────────────
 
+def _canon_ts(ts: str | None) -> str | None:
+    from reality_engine.core.clock import canonical_utc
+    dt = parse_iso8601(ts)
+    return canonical_utc(dt) if dt is not None else ts
+
 def materialize_world_state_at(
     conn: sqlite3.Connection,
     timestamp: str
-) -> dict:
+ ) -> dict[str, Any]:
+    timestamp = _canon_ts(timestamp) or timestamp
     """Materialize a snapshot of the world state at a given transaction time.
 
     Returns a dictionary with:
@@ -190,11 +200,20 @@ def materialize_world_state_at(
     """
     claims = reconstruct_claims_at(conn, None, timestamp)
     observations = reconstruct_observations_at(conn, None, timestamp)
-    entities = []
-    for row in conn.execute("SELECT * FROM entities ORDER BY canonical_name").fetchall():
+    entities: list[dict[str, Any]] = []
+    for row in conn.execute(
+        "SELECT DISTINCT e.* FROM entities e "
+        "WHERE e.created_at <= ? "
+        "OR e.id IN (SELECT subject_id FROM observations WHERE recorded_at <= ?) "
+        "OR e.id IN (SELECT subject_id FROM claim_versions WHERE recorded_at <= ?) "
+        "ORDER BY e.canonical_name",
+        (timestamp, timestamp, timestamp),
+    ).fetchall():
         entities.append(dict(row))
-    relationships = get_relationships_since(conn, timestamp)
-    events = reconstruct_events_at(conn, None, timestamp)
+    rows = conn.execute("SELECT * FROM relationships WHERE recorded_at <= ? ORDER BY recorded_at", (timestamp,)).fetchall()
+    relationships = [dict(r) for r in rows]
+    ev_rows = conn.execute("SELECT * FROM events WHERE recorded_at <= ? ORDER BY recorded_at", (timestamp,)).fetchall()
+    events = [dict(r) for r in ev_rows]
     revision_count = conn.execute(
         "SELECT COUNT(*) as c FROM revisions WHERE created_at <= ?", (timestamp,)
     ).fetchone()[0]

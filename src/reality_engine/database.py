@@ -5,11 +5,11 @@ All database operations are transactional.
 """
 
 import hashlib
-from typing import Optional, Type, Any, Literal
-from uuid import uuid4
 import sqlite3
+import types
 from pathlib import Path
-from datetime import datetime, timezone
+from typing import Any, Literal, Self
+from uuid import uuid4
 
 # ── SQL Schema ──────────────────────────────────────────────────────────────────
 
@@ -285,8 +285,61 @@ CREATE INDEX IF NOT EXISTS idx_observations_valid_time ON observations(valid_fro
 -- Bitemporal index: relationships valid_from/valid_to
 CREATE INDEX IF NOT EXISTS idx_relationships_valid_time ON relationships(valid_from, valid_to);
 
+
 -- Bitemporal index: events occurred_at
 CREATE INDEX IF NOT EXISTS idx_events_occurred_at ON events(occurred_at);
+
+-- Append-only enforcement (F-06)
+CREATE TRIGGER IF NOT EXISTS trg_documents_no_update
+BEFORE UPDATE ON documents
+BEGIN
+    SELECT RAISE(ABORT, 'documents immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_documents_no_delete
+BEFORE DELETE ON documents
+BEGIN
+    SELECT RAISE(ABORT, 'documents immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_source_spans_no_update
+BEFORE UPDATE ON source_spans
+BEGIN
+    SELECT RAISE(ABORT, 'source_spans immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_source_spans_no_delete
+BEFORE DELETE ON source_spans
+BEGIN
+    SELECT RAISE(ABORT, 'source_spans immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_claim_versions_no_update
+BEFORE UPDATE ON claim_versions
+BEGIN
+    SELECT RAISE(ABORT, 'claim_versions immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_claim_versions_no_delete
+BEFORE DELETE ON claim_versions
+BEGIN
+    SELECT RAISE(ABORT, 'claim_versions immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_revisions_no_update
+BEFORE UPDATE ON revisions
+BEGIN
+    SELECT RAISE(ABORT, 'revisions immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_revisions_no_delete
+BEFORE DELETE ON revisions
+BEGIN
+    SELECT RAISE(ABORT, 'revisions immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_audit_events_no_update
+BEFORE UPDATE ON audit_events
+BEGIN
+    SELECT RAISE(ABORT, 'audit_events immutable');
+END;
+CREATE TRIGGER IF NOT EXISTS trg_audit_events_no_delete
+BEFORE DELETE ON audit_events
+BEGIN
+    SELECT RAISE(ABORT, 'audit_events immutable');
+END;
 """
 
 # ── Helpers ─────────────────────────────────────────────────────────────────────
@@ -299,21 +352,28 @@ def _uid(prefix: str) -> str:
 class _Transaction:
     """Context manager for atomic database transactions."""
 
-    def __init__(self, conn: sqlite3.Connection):
+    def __init__(self, conn: sqlite3.Connection, db: Any = None) -> None:
         self.conn = conn
+        self.db = db
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.execute("PRAGMA busy_timeout = 5000")
         self._closed = False
 
-    def __enter__(self) -> "_Transaction":
-        self.conn.execute("BEGIN")
+    def __enter__(self) -> Self:
+        if self.db is not None:
+            self.db._in_tx = True
+        self.conn.execute("BEGIN IMMEDIATE")
         return self
 
-    def __exit__(self, exc_type: Optional[Type[BaseException]], exc_val: Any, exc_tb: Any) -> Literal[False]:
-        if exc_type is not None:
-            self.conn.rollback()
-        else:
-            self.conn.commit()
+    def __exit__(self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: types.TracebackType | None) -> Literal[False]:
+        try:
+            if exc_type is not None:
+                self.conn.rollback()
+            else:
+                self.conn.commit()
+        finally:
+            if self.db is not None:
+                self.db._in_tx = False
         return False
 
 
@@ -322,14 +382,28 @@ class _Transaction:
 class Database:
     """SQLite database wrapper with transactional operations."""
 
-    def __init__(self, path: Path):
+    def __init__(self, path: Path, clock: Any = None) -> None:
         self.path = path
+        self.clock = clock
+        self._in_tx = False
         self.conn = self._connect(path)
+        self.conn.isolation_level = None
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.execute("PRAGMA journal_mode = WAL")
         self.conn.execute("PRAGMA busy_timeout = 5000")
         self.conn.executescript(SCHEMA)
-        self.conn.commit()
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+                version INTEGER PRIMARY KEY,
+                applied_at TEXT NOT NULL
+            )
+        """)
+        cur = self.conn.execute("PRAGMA user_version").fetchone()[0]
+        if cur < 1:
+            self.conn.execute("INSERT OR IGNORE INTO schema_migrations(version, applied_at) VALUES (1, ?)", (self._now(),))
+            self.conn.execute("PRAGMA user_version = 1")
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         self.conn.row_factory = sqlite3.Row
 
     def _connect(self, path: Path) -> sqlite3.Connection:
@@ -344,14 +418,16 @@ class Database:
         return sqlite3.connect(str(path))
 
     def _now(self) -> str:
-        return datetime.now(timezone.utc).isoformat()
+        from reality_engine.core.clock import SystemClock, canonical_utc
+        clk = self.clock if self.clock is not None else SystemClock()
+        return canonical_utc(clk.now())
 
     def transaction(self) -> "_Transaction":
         """Context manager for atomic database transactions.
 
         All database operations within the with block succeed or fail together.
         """
-        return _Transaction(self.conn)
+        return _Transaction(self.conn, self)
 
     # ── Domains ────────────────────────────────────────────────────────────────
 
@@ -362,7 +438,8 @@ class Database:
             " VALUES (?, ?, ?, ?, ?)",
             (dom_id, name, name.lower(), description, self._now()),
         )
-        self.conn.commit()
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         return dom_id
 
     # ── Sources ────────────────────────────────────────────────────────────────
@@ -374,43 +451,63 @@ class Database:
             " VALUES (?, ?, ?, ?, ?, ?)",
             (src_id, name, source_type, canonical_domain, self._now(), self._now()),
         )
-        self.conn.commit()
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         return src_id
 
     # ── Documents ───────────────────────────────────────────────────────────────
 
     def ingest_document(self, source_id: str, content: str, content_type: str,
-                        language: str, published_at: str) -> str:
-        doc_id = _uid("doc")
+                        language: str, published_at: str,
+                        canonical_url: str | None = None, source_native_id: str | None = None,
+                        collected_at: str | None = None, processing_status: str | None = None) -> str:
         content_hash = hashlib.sha256(content.encode("utf-8")).hexdigest()
+        existing = self.conn.execute(
+            "SELECT id FROM documents WHERE source_id=? AND content_hash=?", (source_id, content_hash)
+        ).fetchone()
+        if existing:
+            return str(existing["id"] if hasattr(existing, "keys") else existing[0])
+        doc_id = _uid("doc")
+        if collected_at is None:
+            collected_at = self._now()
         self.conn.execute(
             "INSERT INTO documents (id, source_id, source_native_id, canonical_url, content_hash,"
             " content_type, content, language, published_at, collected_at, processing_status, created_at, updated_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (doc_id, source_id, f"native_{doc_id}", "https://example.com/doc",
+            (doc_id, source_id, source_native_id, canonical_url,
              content_hash, content_type, content, language, published_at,
-             self._now(), "PROCESSED", self._now(), self._now()),
+             collected_at, processing_status, self._now(), self._now()),
         )
-        self.conn.commit()
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         return doc_id
 
     # ── Source Spans ───────────────────────────────────────────────────────────
 
     def extract_source_span(self, document_id: str, quoted_text: str,
                              page: int, start_offset: int, end_offset: int) -> str:
+        row = self.conn.execute("SELECT content FROM documents WHERE id=?", (document_id,)).fetchone()
+        if row is None:
+            raise ValueError("unknown document")
+        content = row["content"] if hasattr(row, "keys") else row[0]
+        if start_offset < 0 or end_offset < start_offset or end_offset > len(content):
+            raise ValueError("offsets out of range")
+        if content[start_offset:end_offset] != quoted_text:
+            raise ValueError("quoted_text mismatch")
         span_id = _uid("span")
         self.conn.execute(
             "INSERT INTO source_spans (id, document_id, start_offset, end_offset, page, quoted_text, created_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?)",
             (span_id, document_id, start_offset, end_offset, page, quoted_text, self._now()),
         )
-        self.conn.commit()
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         return span_id
 
     # ── Entities ───────────────────────────────────────────────────────────────
 
     def register_entity(self, canonical_name: str, entity_type: str,
-                        domain_id: Optional[str] = None, aliases: Optional[list] = None) -> str:
+                        domain_id: str | None = None, aliases: list[str] | None = None) -> str:
         """Register an entity with optional aliases.
 
         Args:
@@ -437,7 +534,8 @@ class Database:
                     " VALUES (?, ?, ?, ?, ?, ?)",
                     (ali_id, ent_id, alias, alias, normalized, self._now()),
                 )
-        self.conn.commit()
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         return ent_id
 
     def resolve_entity(self, name: str, limit: int = 3) -> list[dict[str, Any]]:
@@ -486,7 +584,7 @@ class Database:
         candidates.sort(key=lambda x: x["rank"])
         return [c for c in candidates[:limit]]
 
-    def get_entity_by_id(self, entity_id: str) -> Optional[dict[str, Any]]:
+    def get_entity_by_id(self, entity_id: str) -> dict[str, Any] | None:
         row = self.conn.execute("SELECT * FROM entities WHERE id = ?", (entity_id,)).fetchone()
         return dict(row) if row else None
 
@@ -505,6 +603,11 @@ class Database:
     def register_observation(self, document_id: str, source_id: str,
                              subject_id: str, observed_value: str,
                              recorded_at: str, observation_type: str = "REPORT") -> str:
+        from reality_engine.core.clock import canonical_utc
+        from reality_engine.core.temporal import parse_iso8601
+        dt = parse_iso8601(recorded_at)
+        if dt is not None:
+            recorded_at = canonical_utc(dt)
         obs_id = _uid("obs")
         self.conn.execute(
             "INSERT INTO observations (id, observation_type, subject_id, observed_value, recorded_at,"
@@ -513,7 +616,8 @@ class Database:
             (obs_id, observation_type, subject_id, observed_value, recorded_at,
              source_id, document_id, recorded_at, recorded_at),
         )
-        self.conn.commit()
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         return obs_id
 
     def get_observations_for_entity(self, entity_id: str) -> list[dict[str, Any]]:
@@ -522,7 +626,7 @@ class Database:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def get_source_span(self, span_id: str) -> dict:
+    def get_source_span(self, span_id: str) -> dict[str, Any] | None:
         """Retrieve a source span by ID."""
         row = self.conn.execute(
             "SELECT * FROM source_spans WHERE id = ?", (span_id,)
@@ -539,9 +643,9 @@ class Database:
     # ── Events ─────────────────────────────────────────────────────────────────
 
     def register_event(self, event_type: str, event_description: str,
-                       occurred_at: str, occurred_on: str = None,
-                       recorded_at: str = None, source_id: str = None,
-                       document_id: str = None, observation_ids: str = None) -> str:
+                       occurred_at: str, occurred_on: str | None = None,
+                       recorded_at: str | None = None, source_id: str | None = None,
+                       document_id: str | None = None, observation_ids: str | None = None) -> str:
         """Register an event.
 
         Args:
@@ -567,11 +671,12 @@ class Database:
             (evt_id, event_type, event_description, occurred_at, occurred_on,
              recorded_at, source_id, document_id, observation_ids, recorded_at),
         )
-        self.conn.commit()
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         return evt_id
 
-    def get_events(self, event_type: Optional[str] = None, start_date: Optional[str] = None,
-                   end_date: Optional[str] = None) -> list[dict[str, Any]]:
+    def get_events(self, event_type: str | None = None, start_date: str | None = None,
+                   end_date: str | None = None) -> list[dict[str, Any]]:
         """Query events by type and/or date range.
 
         Returns a list of event dictionaries.
@@ -595,10 +700,10 @@ class Database:
 
     def register_relationship(self, relationship_type: str,
                               subject_id: str, object_id: str,
-                              predicate: Optional[str] = None,
-                              valid_from: Optional[str] = None, valid_to: Optional[str] = None,
-                              recorded_at: Optional[str] = None,
-                              source_id: Optional[str] = None, document_id: Optional[str] = None) -> str:
+                              predicate: str | None = None,
+                              valid_from: str | None = None, valid_to: str | None = None,
+                              recorded_at: str | None = None,
+                              source_id: str | None = None, document_id: str | None = None) -> str:
         """Register a typed relationship between entities.
 
         Args:
@@ -626,7 +731,8 @@ class Database:
             (rel_id, relationship_type, subject_id, object_id, predicate,
              valid_from, valid_to, recorded_at, source_id, document_id, recorded_at),
         )
-        self.conn.commit()
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         return rel_id
 
     def get_relationships_for_entity(self, entity_id: str, direction: str = "outgoing") -> list[dict[str, Any]]:
@@ -648,7 +754,8 @@ class Database:
     def submit_claim(self, subject_id: str, predicate: str, object_value: str,
                      claim_type: str, domain_id: str, document_id: str,
                      source_span_id: str, status: str = "SUPPORTED",
-                     recorded_at: Optional[str] = None) -> str:
+                     recorded_at: str | None = None,
+                     valid_from: str | None = None) -> str:
         """Submit a new claim version and link it to its source span.
 
         Args:
@@ -673,7 +780,7 @@ class Database:
             " document_id, valid_from, recorded_at, status, revision_number, created_at, updated_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
             (claim_id, subject_id, predicate, object_value, claim_type, domain_id,
-             document_id, recorded_at, recorded_at, status, recorded_at, recorded_at),
+             document_id, valid_from, recorded_at, status, recorded_at, recorded_at),
         )
         # Insert a claim version (no time conflation: valid_to stays NULL)
         # Version ID is distinct from claim ID
@@ -683,8 +790,11 @@ class Database:
             " claim_type, domain_id, document_id, valid_from, valid_to, recorded_at, status, revision_number, created_at)"
             " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)",
             (result_version_id, claim_id, subject_id, predicate, object_value, claim_type, domain_id,
-             document_id, recorded_at, None, recorded_at, status, recorded_at),
+             document_id, valid_from, None, recorded_at, status, recorded_at),
         )
+        span_row = self.conn.execute("SELECT document_id FROM source_spans WHERE id=?", (source_span_id,)).fetchone()
+        if span_row is None or (span_row["document_id"] if hasattr(span_row, "keys") else span_row[0]) != document_id:
+            raise ValueError("span document mismatch")
         # Link the claim to the source passage
         evl_id = _uid("evl")
         self.conn.execute(
@@ -692,10 +802,11 @@ class Database:
             " VALUES (?, ?, ?, 'DERIVED_FROM', 'SUPPORTED', ?)",
             (evl_id, claim_id, source_span_id, recorded_at),
         )
-        self.conn.commit()
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         return claim_id
 
-    def get_claim_by_id(self, claim_id: str) -> dict:
+    def get_claim_by_id(self, claim_id: str) -> dict[str, Any] | None:
         row = self.conn.execute("SELECT * FROM claims WHERE id = ?", (claim_id,)).fetchone()
         return dict(row) if row else None
 
@@ -735,7 +846,7 @@ class Database:
             "SELECT * FROM claim_versions WHERE claim_id = ? ORDER BY created_at", (claim_id,)
         ).fetchall()]
 
-    def get_claim_version(self, claim_id: str, revision_number: int) -> Optional[dict[str, Any]]:
+    def get_claim_version(self, claim_id: str, revision_number: int) -> dict[str, Any] | None:
         row = self.conn.execute(
             "SELECT * FROM claim_versions WHERE claim_id = ? AND revision_number = ?",
             (claim_id, revision_number)
@@ -762,21 +873,15 @@ class Database:
             " VALUES (?, ?, ?, ?, ?, ?)",
             (evl_id, claim_id, source_span_id, relationship_type, assessment_status, self._now()),
         )
-        self.conn.commit()
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
         return evl_id
 
-    def delete_entity(self, entity_id: str) -> None:
-        """Delete an entity and all related records (transactional).
+    def retire_entity(self, entity_id: str) -> None:
+        """Retire an entity (append-only: status RETIRED, audit event)."""
+        self.conn.execute("UPDATE entities SET status='RETIRED', updated_at=? WHERE id=?", (self._now(), entity_id))
+        if not getattr(self, "_in_tx", False):
+            self.conn.commit()
 
-        NOTE: This is destructive — use only in test/seed scripts.
-        """
-        self.conn.execute("DELETE FROM entity_aliases WHERE entity_id = ?", (entity_id,))
-        self.conn.execute("DELETE FROM claims WHERE subject_id = ?", (entity_id,))
-        self.conn.execute("DELETE FROM relationships WHERE subject_id = ? OR object_id = ?",
-                          (entity_id, entity_id))
-        self.conn.execute("DELETE FROM observations WHERE subject_id = ?", (entity_id,))
-        self.conn.execute("DELETE FROM entities WHERE id = ?", (entity_id,))
-        self.conn.commit()
-
-    def close(self):
+    def close(self) -> None:
         self.conn.close()

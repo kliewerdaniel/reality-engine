@@ -1,3 +1,5 @@
+> **Superseded 2026-11-02:** contained claims later shown incorrect; see `docs/STATUS.md`.
+
 # Cleanup Report
 
 **Date:** 2026-11-02
